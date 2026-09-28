@@ -16,13 +16,17 @@ export function RcaTitleBar({ rca, mode }: { rca: Rca; mode: 'edit' | 'view' }) 
         </div>
         <p className="mt-1 max-w-3xl text-slate-600">{rca.summary}</p>
         <p className="text-xs text-slate-500">
-          {rca.project.company.name} · {rca.project.name} · Project Owner: {rca.project.owner.name}
+          {[rca.workspace.name, rca.company_name, rca.project_name, rca.project_owner_name && `Project Owner: ${rca.project_owner_name}`]
+            .filter(Boolean)
+            .join(' · ')}
+          {rca.is_sample && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">Sample RCA</span>}
+          {rca.permissions.support && <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 font-semibold text-red-800">Support access (read-only)</span>}
         </p>
       </div>
       <div className="flex max-w-xl flex-wrap justify-end gap-2">
         <WorkflowButtons rca={rca} />
         <ExportButtons rca={rca} />
-        {mode === 'edit' ? (
+        {mode === 'edit' || rca.permissions.support ? (
           <Link to={`/rcas/${rca.id}`} className="btn-secondary">
             Read-only view
           </Link>

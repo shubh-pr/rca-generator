@@ -87,3 +87,28 @@ Where the spec (`docs/SPEC.md`) was silent or ambiguous I took the simplest reas
 - Email or Slack notifications, SSO, Jira or ServiceNow integration, multi-language support, and signature images.
 - Backups (SPEC 8, "daily database backup … restore tested") are an operations task and are not part of the application. The `pgdata` and `uploads` Docker volumes are what need backing up.
 - HTTPS (SPEC 8): the app serves plain HTTP on localhost. Terminate TLS at a reverse proxy or load balancer in front of the `web` container.
+
+---
+
+# B2C (multi-tenant) decisions
+
+Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement calls.
+
+## Phase 1: tenancy and authorization
+
+- **Phase order.** The prompt's Phase 1 (schema) and Phase 3 (authorization) were delivered together. Dropping the global roles removes what the old permission code depended on, so neither could be committed alone with passing tests (see B2C_PLAN section 5).
+- **Effective role on an RCA.** A user's role is the highest of their workspace membership role and their direct RCA-collaborator role. A contributor's teams are the union of the workspace-level team and the per-RCA team. An active support grant adds read-only VIEWER access for platform admins.
+- **No access means 404.** An RCA the user cannot see returns 404 everywhere, never 403. Users who can see an RCA but lack the permission for an action get 403.
+- **Creating an RCA in a workspace you are not in** returns 400 "Workspace not found", so workspace IDs can't be probed.
+- **Numbering.** RCA numbers are per workspace (`RCA-YYYY-NNNN` restarts in each workspace). A global sequence would reveal how many RCAs other customers have.
+- **Labels instead of master data.** Company, Project, Project Owner, RCA Team Leader, Prepared by, Reviewed by, section contributor and Verified by are free text; the name fields default to the creator's name. Suggestions come from names already used in the workspace (`GET /workspaces/:id/labels`). The list filter `project_id` was replaced by `project` (case-insensitive exact match).
+- **People pickers.** Action owners, follow-up owners and sign-off assignees must be people with access to the RCA (`GET /rcas/:id/participants`), so a user cannot attach someone outside the RCA.
+- **Sign-off.** The five rows are labels. An OWNER or EDITOR may assign a row to a participant; then only that person can sign it. Unassigned rows can be signed by any OWNER or EDITOR, so a solo user signs everything. The rule that the three team rows are signed before Project Owner and RCA Team Leader is kept.
+- **Who may do what.** RCA history is visible to everyone who can see the RCA. The workspace audit log screen is for OWNER and EDITOR. Deleting an RCA is OWNER only. Closing and reopening are OWNER and EDITOR.
+- **Section contributors.** A CONTRIBUTOR may upload attachments and add timeline events, and may delete only their own uploads.
+- **My tasks for owners and editors** lists every unsubmitted section of DRAFT RCAs in their workspaces, since they can fill any of them. It also lists sign-offs assigned to the user.
+- **Support access.** Platform admins get read-only access to one workspace through a `support_grants` row that expires. The grant is created by the audited admin endpoint in Phase 5. Support access can view and read history but cannot export. Without a grant, platform admins see nothing.
+- **How scoping is enforced.** A Prisma client extension (`src/tenancy/prismaScope.ts`) injects the visibility filter into every query on a tenant model. Code that must cross tenants (auth flows, jobs, scripts, seeding) opts out explicitly with `unscoped(reason, fn)`. A tenant query outside any scope throws. Raw SQL (`$queryRaw`) is not filtered, so it is used only for the number counter and maintenance.
+- **Migrated legacy data.** Existing users count as email-verified. Each old company became one shared workspace owned by the first Admin (else the first Project Owner). Every active user joined it with their old role mapped (ADMIN/PROJECT_OWNER → OWNER, RCA_LEAD → EDITOR, DEV/QA/PROD → CONTRIBUTOR with the same team, VIEWER → VIEWER). Every user also got a personal workspace. Existing bcrypt password hashes keep working.
+- **Down migration.** `down.sql` is best-effort. Workspace OWNER maps back to ADMIN. Names typed as free text are matched back to users by name, or left empty. Numbers that clash across workspaces are renumbered. A `pg_dump` taken before the upgrade is the real rollback.
+- **Demo data.** Demo data now lives in its own workspace, "Acme Payments (demo)", owned by Jogender Kota, and is seeded only with `NODE_ENV=development` and `SEED_DEMO=true`. The demo password is `Demo-Password-2026`. `admin@rca.local` is the demo platform operator with no workspace access. `npm run purge:demo -- --confirm` deletes every `@rca.local` user and everything they own.

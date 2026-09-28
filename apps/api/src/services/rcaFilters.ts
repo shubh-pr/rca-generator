@@ -6,10 +6,13 @@ import { overdueActionWhere } from './rcaQueries.js';
 /**
  * Filters shared by the RCA list, the list export and the dashboard summary,
  * so the dashboard numbers always match the list for the same filters.
+ * Tenant visibility is added by the Prisma tenant extension, not here.
  */
 export const rcaFilterSchema = z.object({
   status: z.enum(['DRAFT', 'IN_REVIEW', 'CLOSED']).optional(),
-  project_id: zUuid.optional(),
+  workspace_id: zUuid.optional(),
+  /** Project label (exact, case-insensitive). */
+  project: z.string().trim().max(150).optional(),
   severity: z.enum(['P1', 'P2', 'P3', 'P4']).optional(),
   environment: z.enum(['PROD', 'UAT', 'STAGING']).optional(),
   /** RCAs whose section for this team is not yet SUBMITTED. */
@@ -42,7 +45,8 @@ export function buildRcaWhere(f: RcaFilters): Prisma.RcaWhereInput {
   const and: Prisma.RcaWhereInput[] = [{ is_deleted: false }];
   if (f.status) and.push({ status: f.status });
   if (f.open === 'true') and.push({ status: { in: ['DRAFT', 'IN_REVIEW'] } });
-  if (f.project_id) and.push({ project_id: f.project_id });
+  if (f.workspace_id) and.push({ workspace_id: f.workspace_id });
+  if (f.project) and.push({ project_name: { equals: f.project, mode: 'insensitive' } });
   if (f.severity) and.push({ severity: f.severity });
   if (f.environment) and.push({ environment: f.environment });
   if (f.team) and.push({ sections: { some: { team: f.team, section_status: { not: 'SUBMITTED' } } } });
@@ -58,6 +62,7 @@ export function buildRcaWhere(f: RcaFilters): Prisma.RcaWhereInput {
         { rca_number: { contains: f.q, mode: 'insensitive' } },
         { summary: { contains: f.q, mode: 'insensitive' } },
         { ticket_id: { contains: f.q, mode: 'insensitive' } },
+        { project_name: { contains: f.q, mode: 'insensitive' } },
       ],
     });
   }

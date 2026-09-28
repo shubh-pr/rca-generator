@@ -5,17 +5,12 @@ import { config } from './config.js';
 import { notFound } from './lib/errors.js';
 import { errorHandler } from './lib/errorHandler.js';
 import { jsonReplacer } from './lib/json.js';
-import { companiesRouter } from './routes/companies.js';
-import { projectsRouter } from './routes/projects.js';
-import { rcasRouter } from './routes/rcas.js';
-import { sectionsRouter } from './routes/sections.js';
-import { attachmentsRouter } from './routes/attachments.js';
 import { auditRouter } from './routes/audit.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { exportsRouter } from './routes/exports.js';
-import { followupsRouter } from './routes/followups.js';
-import { workflowRouter } from './routes/workflow.js';
-import { usersRouter } from './routes/users.js';
+import { rcaAccessMiddleware, rcaRouter } from './routes/rca/index.js';
+import { rcasRouter } from './routes/rcas.js';
+import { workspacesRouter } from './routes/workspaces.js';
 
 export function createApp() {
   const app = express();
@@ -31,18 +26,13 @@ export function createApp() {
   api.use(authRouter);
   api.use(meRouter);
 
-  // Everything below requires a logged-in user.
+  // Everything below requires a logged-in user and runs inside that user's tenant scope.
   const secured = Router();
   secured.use(requireAuth);
-  secured.use(usersRouter);
-  secured.use(companiesRouter);
-  secured.use(projectsRouter);
-  secured.use(exportsRouter);
+  secured.use(workspacesRouter);
+  secured.use(exportsRouter); // before /rcas/:id so "export" is not taken as an id
   secured.use(rcasRouter);
-  secured.use(sectionsRouter);
-  secured.use(workflowRouter);
-  secured.use(followupsRouter);
-  secured.use(attachmentsRouter);
+  secured.use('/rcas/:id', rcaAccessMiddleware, rcaRouter);
   secured.use(auditRouter);
   secured.use(dashboardRouter);
   api.use(secured);

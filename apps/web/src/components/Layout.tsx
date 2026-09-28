@@ -1,17 +1,44 @@
 import { NavLink, Outlet } from 'react-router';
 import { useAuth } from '../lib/auth';
 import { ROLE_LABEL } from '../lib/labels';
-import { can } from '../lib/permissions';
+import { auditWorkspaces } from '../lib/permissions';
+import { useWorkspace } from '../lib/workspace';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `block rounded px-3 py-2 text-sm ${isActive ? 'bg-white/15 font-semibold text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'}`;
+
+function WorkspaceSwitcher() {
+  const { user } = useAuth();
+  const { current, select } = useWorkspace();
+  if (!user) return null;
+  return (
+    <label className="mb-4 block px-3 text-xs text-white/70">
+      Workspace
+      <select
+        className="mt-1 w-full rounded border border-white/30 bg-navy-700 px-2 py-1 text-sm text-white"
+        value={current?.id ?? ''}
+        onChange={(e) => select(e.target.value || null)}
+        aria-label="Workspace"
+        data-testid="workspace-switcher"
+      >
+        <option value="">All workspaces</option>
+        {user.workspaces.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name} ({ROLE_LABEL[w.role]})
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export function Layout() {
   const { user, logout } = useAuth();
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-56 shrink-0 flex-col bg-navy px-3 py-4 print:hidden">
-        <div className="mb-6 px-3 text-lg font-bold text-white">RCA Dashboard</div>
+        <div className="mb-4 px-3 text-lg font-bold text-white">RCA Dashboard</div>
+        <WorkspaceSwitcher />
         <nav className="flex flex-1 flex-col gap-1" aria-label="Main">
           <NavLink to="/dashboard" className={linkClass}>
             Dashboard
@@ -22,24 +49,10 @@ export function Layout() {
           <NavLink to="/my-tasks" className={linkClass}>
             My tasks
           </NavLink>
-          {can.viewAuditLog(user) && (
+          {auditWorkspaces(user).length > 0 && (
             <NavLink to="/audit" className={linkClass}>
               Audit log
             </NavLink>
-          )}
-          {can.manageMasters(user) && (
-            <>
-              <div className="mt-4 px-3 text-xs font-semibold tracking-wide text-white/50 uppercase">Masters</div>
-              <NavLink to="/admin/users" className={linkClass}>
-                Users
-              </NavLink>
-              <NavLink to="/admin/projects" className={linkClass}>
-                Projects
-              </NavLink>
-              <NavLink to="/admin/companies" className={linkClass}>
-                Companies
-              </NavLink>
-            </>
           )}
         </nav>
         {user && (
@@ -47,7 +60,7 @@ export function Layout() {
             <div className="font-semibold text-white" data-testid="current-user">
               {user.name}
             </div>
-            <div>{ROLE_LABEL[user.role]}</div>
+            <div className="truncate">{user.email}</div>
             <button type="button" onClick={logout} className="mt-2 text-white underline">
               Log out
             </button>

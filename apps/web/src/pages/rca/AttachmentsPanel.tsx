@@ -2,9 +2,7 @@ import { useRef, useState, type DragEvent } from 'react';
 import { api, ApiError, download } from '../../api/client';
 import type { Rca } from '../../api/types';
 import { ErrorBanner, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { formatDateTime } from '../../lib/dates';
-import { can } from '../../lib/permissions';
 import { useRcaMutation } from './rcaApi';
 
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -19,13 +17,12 @@ function formatSize(n: number | null) {
 
 /** Attachments with drag and drop (max 10 MB per file) and links (SPEC 6.2). */
 export function AttachmentsPanel({ rca }: { rca: Rca }) {
-  const { user } = useAuth();
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [description, setDescription] = useState('');
   const [link, setLink] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
-  const editable = can.addAttachment(user) && rca.status !== 'CLOSED';
+  const editable = rca.permissions.add_attachment && rca.status !== 'CLOSED';
 
   const upload = useRcaMutation(rca.id, (file: File) => {
     const fd = new FormData();
@@ -89,7 +86,7 @@ export function AttachmentsPanel({ rca }: { rca: Rca }) {
                 <div className="text-slate-500">{formatDateTime(att.created_at)}</div>
               </td>
               <td className="text-right">
-                {rca.status !== 'CLOSED' && can.deleteAttachment(user, att.uploaded_by) && (
+                {rca.status !== 'CLOSED' && rca.permissions.delete_attachment[att.id] && (
                   <button type="button" className="btn-ghost text-red-700" onClick={() => confirm('Remove attachment?') && remove.mutate(att.id)}>
                     Remove
                   </button>

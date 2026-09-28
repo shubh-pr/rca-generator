@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router';
 import './index.css';
 import { AuthProvider } from './lib/auth';
 import { router } from './router';
+import { WorkspaceProvider } from './lib/workspace';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -14,7 +15,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <WorkspaceProvider>
+          <RouterProvider router={router} />
+        </WorkspaceProvider>
       </AuthProvider>
     </QueryClientProvider>
   </StrictMode>,

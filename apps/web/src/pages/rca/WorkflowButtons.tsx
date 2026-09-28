@@ -4,14 +4,12 @@ import { useNavigate } from 'react-router';
 import { api, ApiError } from '../../api/client';
 import type { Rca, Team } from '../../api/types';
 import { Field, Modal, TextArea } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { TEAM_LABEL, TEAMS } from '../../lib/labels';
-import { can } from '../../lib/permissions';
 import { useRcaMutation } from './rcaApi';
 
 /** Review, send back, close, reopen and delete (SPEC 3.1). The server checks every rule. */
 export function WorkflowButtons({ rca }: { rca: Rca }) {
-  const { user } = useAuth();
+  const p = rca.permissions;
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [modal, setModal] = useState<'send-back' | 'reopen' | null>(null);
@@ -28,27 +26,27 @@ export function WorkflowButtons({ rca }: { rca: Rca }) {
 
   return (
     <>
-      {rca.status === 'DRAFT' && can.submitReview(user) && (
+      {rca.status === 'DRAFT' && p.review && (
         <button type="button" className="btn-primary" disabled={submitReview.isPending} onClick={() => submitReview.mutate(undefined)}>
           Submit for review
         </button>
       )}
-      {rca.status === 'IN_REVIEW' && can.sendBack(user) && (
+      {rca.status === 'IN_REVIEW' && p.review && (
         <button type="button" className="btn-secondary" onClick={() => setModal('send-back')}>
           Send back
         </button>
       )}
-      {rca.status === 'IN_REVIEW' && can.closeRca(user) && (
+      {rca.status === 'IN_REVIEW' && p.close && (
         <button type="button" className="btn-primary" disabled={close.isPending} onClick={() => confirm(`Close ${rca.rca_number}?`) && close.mutate(undefined)}>
           Close RCA
         </button>
       )}
-      {rca.status === 'CLOSED' && can.reopenRca(user) && (
+      {rca.status === 'CLOSED' && p.reopen && (
         <button type="button" className="btn-secondary" onClick={() => setModal('reopen')}>
           Reopen
         </button>
       )}
-      {can.deleteRca(user) && (
+      {p.delete && (
         <button type="button" className="btn-ghost text-red-700" onClick={() => confirm(`Delete ${rca.rca_number}? It will be hidden (soft delete).`) && remove.mutate()}>
           Delete
         </button>

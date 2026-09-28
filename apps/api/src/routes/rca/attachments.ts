@@ -4,17 +4,18 @@ import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { currentUser } from '../auth/index.js';
-import { config } from '../config.js';
-import { prisma } from '../db.js';
-import { writeAudit } from '../lib/audit.js';
-import { badRequest, notFound } from '../lib/errors.js';
-import { can, ensure } from '../lib/permissions.js';
-import { idParam, parse, zText, zUuid } from '../lib/validate.js';
-import { findRcaOr404, userRef } from '../services/rcaQueries.js';
-import { ensureRcaEditable } from '../services/rcaRules.js';
+import { currentUser } from '../../auth/index.js';
+import { config } from '../../config.js';
+import { prisma } from '../../db.js';
+import { rcaAudit, writeAudit } from '../../lib/audit.js';
+import { badRequest, notFound } from '../../lib/errors.js';
+import { parse, zText, zUuid } from '../../lib/validate.js';
+import { authorize } from '../../policy/policy.js';
+import { userRef } from '../../services/rcaQueries.js';
+import { ensureRcaEditable } from '../../services/rcaRules.js';
+import { rcaOf } from './access.js';
 
-export const attachmentsRouter = Router();
+export const attachmentsRouter = Router({ mergeParams: true });
 
 /** SPEC 8: allowed types. The served Content-Type comes from this table, never from the client. */
 export const ALLOWED_TYPES: Record<string, string> = {
@@ -65,13 +66,14 @@ const linkSchema = z
     url: z
       .string()
       .trim()
+      .max(2000)
       .url('Must be a valid URL')
       .refine((u) => /^https?:\/\//i.test(u), 'Only http(s) links are allowed'),
     description: zText(255).optional(),
   })
   .strict();
 
-const params = z.object({ id: zUuid, aid: zUuid });
+const aidParam = (req: { params: Record<string, string> }) => parse(z.object({ aid: zUuid }), { aid: req.params.aid }).aid;
 
 const publicFields = {
   id: true,
@@ -87,18 +89,17 @@ const publicFields = {
   uploader: userRef,
 } as const;
 
-attachmentsRouter.get('/rcas/:id/attachments', async (req, res) => {
-  const { id } = parse(idParam, req.params);
-  await findRcaOr404(prisma, id);
-  const data = await prisma.rcaAttachment.findMany({ where: { rca_id: id }, orderBy: { created_at: 'asc' }, select: publicFields });
+attachmentsRouter.get('/attachments', async (req, res) => {
+  const { rca, ctx } = rcaOf(req);
+  authorize(ctx, 'rca.view');
+  const data = await prisma.rcaAttachment.findMany({ where: { rca_id: rca.id }, orderBy: { created_at: 'asc' }, select: publicFields });
   res.json({ data });
 });
 
-attachmentsRouter.post('/rcas/:id/attachments', async (req, res) => {
+attachmentsRouter.post('/attachments', async (req, res) => {
   const me = currentUser(req);
-  const { id } = parse(idParam, req.params);
-  const rca = await findRcaOr404(prisma, id);
-  ensure(can.addAttachment(me));
+  const { rca, ctx } = rcaOf(req);
+  authorize(ctx, 'attachment.add');
   ensureRcaEditable(rca);
 
   let data;
@@ -128,17 +129,17 @@ attachmentsRouter.post('/rcas/:id/attachments', async (req, res) => {
   }
 
   const created = await prisma.$transaction(async (tx) => {
-    const row = await tx.rcaAttachment.create({ data: { ...data, rca_id: id, uploaded_by: me.id }, select: publicFields });
-    await writeAudit(tx, { entity: 'rca_attachment', entity_id: row.id, rca_id: id, action: 'CREATE', new_value: { ...data, file_path: undefined }, user_id: me.id });
+    const row = await tx.rcaAttachment.create({ data: { ...data, rca_id: rca.id, uploaded_by: me.id }, select: publicFields });
+    await writeAudit(tx, rcaAudit(rca, { entity: 'rca_attachment', entity_id: row.id, action: 'CREATE', new_value: { ...data, file_path: undefined }, user_id: me.id }));
     return row;
   });
   res.status(201).json(created);
 });
 
-attachmentsRouter.get('/rcas/:id/attachments/:aid/download', async (req, res) => {
-  const { id, aid } = parse(params, req.params);
-  await findRcaOr404(prisma, id);
-  const att = await prisma.rcaAttachment.findFirst({ where: { id: aid, rca_id: id } });
+attachmentsRouter.get('/attachments/:aid/download', async (req, res) => {
+  const { rca, ctx } = rcaOf(req);
+  authorize(ctx, 'rca.view');
+  const att = await prisma.rcaAttachment.findFirst({ where: { id: aidParam(req), rca_id: rca.id } });
   if (!att) throw notFound('Attachment not found');
   if (att.kind !== 'FILE' || !att.file_path) throw notFound('This attachment is a link, not a file');
   const full = path.join(config.uploadDir, path.basename(att.file_path));
@@ -151,24 +152,22 @@ attachmentsRouter.get('/rcas/:id/attachments/:aid/download', async (req, res) =>
   fs.createReadStream(full).pipe(res);
 });
 
-attachmentsRouter.delete('/rcas/:id/attachments/:aid', async (req, res) => {
+attachmentsRouter.delete('/attachments/:aid', async (req, res) => {
   const me = currentUser(req);
-  const { id, aid } = parse(params, req.params);
-  const rca = await findRcaOr404(prisma, id);
-  const att = await prisma.rcaAttachment.findFirst({ where: { id: aid, rca_id: id } });
+  const { rca, ctx } = rcaOf(req);
+  const att = await prisma.rcaAttachment.findFirst({ where: { id: aidParam(req), rca_id: rca.id } });
   if (!att) throw notFound('Attachment not found');
-  ensure(can.deleteAttachment(me, att.uploaded_by), 'Only the uploader, RCA Team Leader or Admin can remove this attachment');
+  authorize(ctx, 'attachment.delete', att, 'Only the uploader, an owner or an editor can remove this attachment');
   ensureRcaEditable(rca);
   await prisma.$transaction(async (tx) => {
-    await tx.rcaAttachment.delete({ where: { id: aid } });
-    await writeAudit(tx, {
+    await tx.rcaAttachment.delete({ where: { id: att.id } });
+    await writeAudit(tx, rcaAudit(rca, {
       entity: 'rca_attachment',
-      entity_id: aid,
-      rca_id: id,
+      entity_id: att.id,
       action: 'DELETE',
       old_value: { kind: att.kind, file_name: att.file_name, url: att.url, description: att.description },
       user_id: me.id,
-    });
+    }));
   });
   if (att.file_path) fs.rmSync(path.join(config.uploadDir, path.basename(att.file_path)), { force: true });
   res.status(204).end();

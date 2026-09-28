@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { Rca, TimelineEvent } from '../../api/types';
 import { ErrorBanner, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { isoToIstInput, istInputToIso } from '../../lib/dates';
-import { can } from '../../lib/permissions';
 import { useRcaMutation } from './rcaApi';
 
 interface RowValues {
@@ -23,10 +21,9 @@ const toBody = (v: RowValues) => ({ event_time: istInputToIso(v.event_time), eve
 
 /** Timeline with "Add row" and inline editing (SPEC 6.2). Times are entered in IST. */
 export function TimelineTable({ rca }: { rca: Rca }) {
-  const { user } = useAuth();
   const open = rca.status !== 'CLOSED';
-  const canAdd = can.addTimeline(user) && open;
-  const canEdit = can.editTimeline(user) && open;
+  const canAdd = rca.permissions.add_timeline && open;
+  const canEdit = rca.permissions.edit_timeline && open;
   const [adding, setAdding] = useState(false);
 
   return (

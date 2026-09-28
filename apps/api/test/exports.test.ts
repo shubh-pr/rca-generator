@@ -6,13 +6,13 @@ import { closePdfBrowser } from '../src/export/pdf.js';
 import {
   api,
   bearer,
-  createActors,
-  createProject,
   createRca,
+  createTeam,
+  db as prisma,
+  MEMBER_KEYS,
   prepareForReview,
-  prisma,
+  raw,
   resetDb,
-  ROLE_KEYS,
   signAll,
   type Actor,
   type RoleKey,
@@ -43,23 +43,23 @@ async function pdfPages(buf: Buffer): Promise<string[]> {
 
 beforeAll(async () => {
   await resetDb();
-  a = await createActors();
-  const { project } = await createProject(a.PROJECT_OWNER.id);
-  draftId = (await createRca(a.RCA_LEAD, project.id, a.RCA_LEAD.id, { summary: 'Checkout <script>alert(1)</script> failed' })).id;
+  const t = await createTeam();
+  a = t.a;
+  draftId = (await createRca(a.EDITOR, t.workspaceId, { summary: 'Checkout <script>alert(1)</script> failed' })).id;
   // Long timeline to force the table across pages (repeated header check).
-  await prisma.rcaTimeline.createMany({
+  await raw(() => prisma.rcaTimeline.createMany({
     data: Array.from({ length: 70 }, (_, i) => ({
       rca_id: draftId,
       event_time: new Date(Date.UTC(2026, 8, 27, 8, i)),
       event: `Event number ${i + 1}`,
       sort_order: i + 1,
     })),
-  });
-  closedId = (await createRca(a.RCA_LEAD, project.id, a.RCA_LEAD.id, { severity: 'P1' })).id;
+  }));
+  closedId = (await createRca(a.EDITOR, t.workspaceId, { severity: 'P1' })).id;
   await prepareForReview(a, closedId);
-  await api().post(`/api/v1/rcas/${closedId}/submit-review`).set(bearer(a.RCA_LEAD)).send({});
-  await signAll(a, closedId);
-  const closed = await api().post(`/api/v1/rcas/${closedId}/close`).set(bearer(a.PROJECT_OWNER)).send({});
+  await api().post(`/api/v1/rcas/${closedId}/submit-review`).set(bearer(a.EDITOR)).send({});
+  await signAll(a.OWNER, closedId);
+  const closed = await api().post(`/api/v1/rcas/${closedId}/close`).set(bearer(a.OWNER)).send({});
   expect(closed.status).toBe(200);
 }, 120_000);
 
@@ -208,7 +208,7 @@ describe('DOCX export', () => {
 
 describe('list export', () => {
   it('CSV rows match the filtered list, neutralise formulas, and optionally one row per action', async () => {
-    await prisma.rca.update({ where: { id: draftId }, data: { ticket_id: '=HYPERLINK("x")' } });
+    await raw(() => prisma.rca.update({ where: { id: draftId }, data: { ticket_id: '=HYPERLINK("x")' } }));
     const list = await api().get('/api/v1/rcas?status=DRAFT').set(bearer(a.VIEWER));
     const csv = await api().get('/api/v1/rcas/export?format=csv&status=DRAFT').set(bearer(a.VIEWER));
     expect(csv.status).toBe(200);
@@ -235,11 +235,15 @@ describe('list export', () => {
 });
 
 describe('export permissions and audit', () => {
-  it('every role can print and download; every export is audited as EXPORT', async () => {
-    for (const r of ROLE_KEYS) {
+  it('every member can print and download, outsiders get 404; every export is audited as EXPORT', async () => {
+    for (const r of MEMBER_KEYS) {
       expect((await api().get(`/api/v1/rcas/${closedId}/print`).set(bearer(a[r]))).status).toBe(200);
     }
-    const rows = await prisma.auditLog.findMany({ where: { action: 'EXPORT' } });
+    expect((await api().get(`/api/v1/rcas/${closedId}/print`).set(bearer(a.OUTSIDER))).status).toBe(404);
+    expect((await api().get(`/api/v1/rcas/${closedId}/export?format=pdf`).set(bearer(a.OUTSIDER))).status).toBe(404);
+    const outsiderList = await api().get('/api/v1/rcas/export?format=csv').set(bearer(a.OUTSIDER));
+    expect(outsiderList.text.trim().split('\r\n')).toHaveLength(1); // header only
+    const rows = await raw(() => prisma.auditLog.findMany({ where: { action: 'EXPORT' } }));
     const formats = new Set(rows.map((x) => (x.new_value as { format: string }).format));
     for (const f of ['print', 'pdf', 'docx', 'csv', 'xlsx']) expect(formats).toContain(f);
     expect(rows.some((x) => x.entity === 'template')).toBe(true);

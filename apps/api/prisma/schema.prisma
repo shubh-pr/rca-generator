@@ -91,16 +91,13 @@ enum DetectionMethod {
   @@map("detection_method")
 }
 
-enum UserRole {
-  ADMIN
-  PROJECT_OWNER
-  RCA_LEAD
-  DEV
-  QA
-  PROD
+enum WorkspaceRole {
+  OWNER
+  EDITOR
+  CONTRIBUTOR
   VIEWER
 
-  @@map("user_role")
+  @@map("workspace_role")
 }
 
 enum SignoffRole {
@@ -113,75 +110,217 @@ enum SignoffRole {
   @@map("signoff_role")
 }
 
-// ---------- 4.3 users, companies, projects ----------
+enum EmailTokenType {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  CHANGE_EMAIL
+
+  @@map("email_token_type")
+}
+
+// ---------- Identity and tenancy (docs/B2C_PLAN.md section 3) ----------
 
 model User {
-  id            String   @id @default(uuid()) @db.Uuid
-  name          String   @db.VarChar(120)
-  email         String   @unique @db.VarChar(180)
-  password_hash String   @db.VarChar(100)
-  role          UserRole
-  team          Team?
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now()) @db.Timestamptz(3)
-  updated_at    DateTime @updatedAt @db.Timestamptz(3)
+  id                 String    @id @default(uuid()) @db.Uuid
+  name               String    @db.VarChar(120)
+  email              String    @unique @db.VarChar(180)
+  password_hash      String?   @db.VarChar(200)
+  email_verified_at  DateTime? @db.Timestamptz(3)
+  last_login_at      DateTime? @db.Timestamptz(3)
+  deleted_at         DateTime? @db.Timestamptz(3)
+  purge_after        DateTime? @db.Timestamptz(3)
+  is_platform_admin  Boolean   @default(false)
+  is_active          Boolean   @default(true)
+  failed_login_count Int       @default(0)
+  locked_until       DateTime? @db.Timestamptz(3)
+  google_sub         String?   @unique @db.VarChar(255)
+  onboarded_at       DateTime? @db.Timestamptz(3)
+  created_at         DateTime  @default(now()) @db.Timestamptz(3)
+  updated_at         DateTime  @updatedAt @db.Timestamptz(3)
 
-  owned_projects      Project[]        @relation("ProjectOwner")
-  led_rcas            Rca[]            @relation("RcaTeamLeader")
-  prepared_rcas       Rca[]            @relation("RcaPreparedBy")
-  reviewed_rcas       Rca[]            @relation("RcaReviewedBy")
-  created_rcas        Rca[]            @relation("RcaCreatedBy")
-  updated_rcas        Rca[]            @relation("RcaUpdatedBy")
-  contributed_sections RcaTeamSection[] @relation("SectionContributor")
-  verified_sections   RcaTeamSection[] @relation("SectionVerifiedBy")
-  updated_sections    RcaTeamSection[] @relation("SectionUpdatedBy")
-  owned_actions       RcaAction[]      @relation("ActionOwner")
-  created_actions     RcaAction[]      @relation("ActionCreatedBy")
-  owned_followups     RcaFollowup[]    @relation("FollowupOwner")
-  created_followups   RcaFollowup[]    @relation("FollowupCreatedBy")
-  created_timeline    RcaTimeline[]    @relation("TimelineCreatedBy")
-  uploads             RcaAttachment[]
-  signoffs            RcaSignoff[]
-  audit_entries       AuditLog[]
+  owned_workspaces  Workspace[]       @relation("WorkspaceOwner")
+  memberships       WorkspaceMember[]
+  collaborations    RcaCollaborator[]
+  created_rcas      Rca[]             @relation("RcaCreatedBy")
+  updated_rcas      Rca[]             @relation("RcaUpdatedBy")
+  updated_sections  RcaTeamSection[]  @relation("SectionUpdatedBy")
+  owned_actions     RcaAction[]       @relation("ActionOwner")
+  created_actions   RcaAction[]       @relation("ActionCreatedBy")
+  owned_followups   RcaFollowup[]     @relation("FollowupOwner")
+  created_followups RcaFollowup[]     @relation("FollowupCreatedBy")
+  created_timeline  RcaTimeline[]     @relation("TimelineCreatedBy")
+  uploads           RcaAttachment[]
+  signoffs          RcaSignoff[]      @relation("SignoffSignedBy")
+  assigned_signoffs RcaSignoff[]      @relation("SignoffAssignee")
+  audit_entries     AuditLog[]
+  invitations_sent  Invitation[]      @relation("InvitedBy")
+  email_tokens      EmailToken[]
+  refresh_tokens    RefreshToken[]
+  quota             UsageQuota?
+  support_grants    SupportGrant[]
 
   @@map("users")
 }
 
-model Company {
-  id         String   @id @default(uuid()) @db.Uuid
-  name       String   @unique @db.VarChar(150)
-  created_at DateTime @default(now()) @db.Timestamptz(3)
-  updated_at DateTime @updatedAt @db.Timestamptz(3)
+model Workspace {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @db.VarChar(120)
+  /// Primary owner: the user whose quota this workspace uses.
+  owner_id    String   @db.Uuid
+  /// Billing extension point; only FREE exists today.
+  plan        String   @default("FREE") @db.VarChar(20)
+  is_personal Boolean  @default(false)
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+  updated_at  DateTime @updatedAt @db.Timestamptz(3)
 
-  projects Project[]
+  owner          User              @relation("WorkspaceOwner", fields: [owner_id], references: [id])
+  members        WorkspaceMember[]
+  rcas           Rca[]
+  invitations    Invitation[]
+  support_grants SupportGrant[]
+  audit_entries  AuditLog[]
 
-  @@map("companies")
+  @@index([owner_id])
+  @@map("workspaces")
 }
 
-model Project {
+model WorkspaceMember {
+  id           String        @id @default(uuid()) @db.Uuid
+  workspace_id String        @db.Uuid
+  user_id      String        @db.Uuid
+  role         WorkspaceRole
+  /// Team for a workspace-level CONTRIBUTOR (applies to every RCA in the workspace).
+  team         Team?
+  created_at   DateTime      @default(now()) @db.Timestamptz(3)
+  updated_at   DateTime      @updatedAt @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([workspace_id, user_id])
+  @@index([user_id])
+  @@map("workspace_members")
+}
+
+model RcaCollaborator {
+  id         String        @id @default(uuid()) @db.Uuid
+  rca_id     String        @db.Uuid
+  user_id    String        @db.Uuid
+  role       WorkspaceRole
+  team       Team?
+  created_at DateTime      @default(now()) @db.Timestamptz(3)
+  updated_at DateTime      @updatedAt @db.Timestamptz(3)
+
+  rca  Rca  @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([rca_id, user_id])
+  @@index([user_id])
+  @@map("rca_collaborators")
+}
+
+model Invitation {
+  id           String        @id @default(uuid()) @db.Uuid
+  email        String        @db.VarChar(180)
+  workspace_id String?       @db.Uuid
+  rca_id       String?       @db.Uuid
+  role         WorkspaceRole
+  team         Team?
+  token_hash   String        @unique @db.VarChar(64)
+  invited_by   String?       @db.Uuid
+  expires_at   DateTime      @db.Timestamptz(3)
+  accepted_at  DateTime?     @db.Timestamptz(3)
+  accepted_by  String?       @db.Uuid
+  revoked_at   DateTime?     @db.Timestamptz(3)
+  created_at   DateTime      @default(now()) @db.Timestamptz(3)
+
+  workspace Workspace? @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  rca       Rca?       @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  inviter   User?      @relation("InvitedBy", fields: [invited_by], references: [id], onDelete: SetNull)
+
+  @@index([email])
+  @@index([workspace_id])
+  @@index([rca_id])
+  @@map("invitations")
+}
+
+model EmailToken {
+  id         String         @id @default(uuid()) @db.Uuid
+  user_id    String         @db.Uuid
+  type       EmailTokenType
+  token_hash String         @unique @db.VarChar(64)
+  new_email  String?        @db.VarChar(180)
+  expires_at DateTime       @db.Timestamptz(3)
+  used_at    DateTime?      @db.Timestamptz(3)
+  created_at DateTime       @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, type])
+  @@map("email_tokens")
+}
+
+model RefreshToken {
+  id             String    @id @default(uuid()) @db.Uuid
+  user_id        String    @db.Uuid
+  /// One login session; all rotations of a token share the family.
+  family_id      String    @db.Uuid
+  token_hash     String    @unique @db.VarChar(64)
+  expires_at     DateTime  @db.Timestamptz(3)
+  revoked_at     DateTime? @db.Timestamptz(3)
+  replaced_by_id String?   @db.Uuid
+  user_agent     String?   @db.VarChar(255)
+  created_at     DateTime  @default(now()) @db.Timestamptz(3)
+  last_used_at   DateTime? @db.Timestamptz(3)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([family_id])
+  @@map("refresh_tokens")
+}
+
+/// Per-user limits (null = env default; extension point for billing) and a usage snapshot.
+model UsageQuota {
+  user_id             String   @id @db.Uuid
+  storage_limit_bytes BigInt?
+  rca_limit           Int?
+  storage_bytes_used  BigInt   @default(0)
+  rca_count           Int      @default(0)
+  updated_at          DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("usage_quotas")
+}
+
+/// Audited, time-limited read-only access for a platform admin (support and abuse handling).
+model SupportGrant {
   id            String   @id @default(uuid()) @db.Uuid
-  company_id    String   @db.Uuid
-  name          String   @db.VarChar(150)
-  owner_user_id String   @db.Uuid
+  admin_user_id String   @db.Uuid
+  workspace_id  String   @db.Uuid
+  reason        String
+  expires_at    DateTime @db.Timestamptz(3)
   created_at    DateTime @default(now()) @db.Timestamptz(3)
-  updated_at    DateTime @updatedAt @db.Timestamptz(3)
 
-  company Company @relation(fields: [company_id], references: [id])
-  owner   User    @relation("ProjectOwner", fields: [owner_user_id], references: [id])
-  rcas    Rca[]
+  admin     User      @relation(fields: [admin_user_id], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
-  @@unique([company_id, name])
-  @@map("projects")
+  @@index([admin_user_id, expires_at])
+  @@map("support_grants")
 }
 
 // ---------- 4.4 rca ----------
 
 model Rca {
   id                  String           @id @default(uuid()) @db.Uuid
-  rca_number          String           @unique @db.VarChar(20)
+  workspace_id        String           @db.Uuid
+  rca_number          String           @db.VarChar(20)
   rca_date            DateTime         @db.Date
-  project_id          String           @db.Uuid
-  team_leader_id      String           @db.Uuid
+  company_name        String?          @db.VarChar(150)
+  project_name        String?          @db.VarChar(150)
+  project_owner_name  String?          @db.VarChar(120)
+  team_leader_name    String?          @db.VarChar(120)
   ticket_id           String?          @db.VarChar(60)
   severity            Severity
   environment         Environment
@@ -190,8 +329,8 @@ model Rca {
   incident_start      DateTime         @db.Timestamptz(3)
   detected_at         DateTime?        @db.Timestamptz(3)
   resolved_at         DateTime?        @db.Timestamptz(3)
-  prepared_by         String?          @db.Uuid
-  reviewed_by         String?          @db.Uuid
+  prepared_by_name    String?          @db.VarChar(120)
+  reviewed_by_name    String?          @db.VarChar(120)
   summary             String
   impact_users        String?
   impact_duration     String?          @db.VarChar(80)
@@ -203,6 +342,7 @@ model Rca {
   lessons_well        String?
   lessons_not_well    String?
   lessons_key         String?
+  is_sample           Boolean          @default(false)
   is_deleted          Boolean          @default(false)
   closed_at           DateTime?        @db.Timestamptz(3)
   created_at          DateTime         @default(now()) @db.Timestamptz(3)
@@ -210,31 +350,34 @@ model Rca {
   created_by          String?          @db.Uuid
   updated_by          String?          @db.Uuid
 
-  project          Project          @relation(fields: [project_id], references: [id])
-  team_leader      User             @relation("RcaTeamLeader", fields: [team_leader_id], references: [id])
-  prepared_by_user User?            @relation("RcaPreparedBy", fields: [prepared_by], references: [id])
-  reviewed_by_user User?            @relation("RcaReviewedBy", fields: [reviewed_by], references: [id])
-  created_by_user  User?            @relation("RcaCreatedBy", fields: [created_by], references: [id])
-  updated_by_user  User?            @relation("RcaUpdatedBy", fields: [updated_by], references: [id])
-  timeline         RcaTimeline[]
-  sections         RcaTeamSection[]
-  followups        RcaFollowup[]
-  attachments      RcaAttachment[]
-  signoffs         RcaSignoff[]
-  audit_entries    AuditLog[]
+  workspace       Workspace         @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  created_by_user User?             @relation("RcaCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user User?             @relation("RcaUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+  timeline        RcaTimeline[]
+  sections        RcaTeamSection[]
+  followups       RcaFollowup[]
+  attachments     RcaAttachment[]
+  signoffs        RcaSignoff[]
+  collaborators   RcaCollaborator[]
+  invitations     Invitation[]
+  audit_entries   AuditLog[]
 
+  @@unique([workspace_id, rca_number])
+  @@index([workspace_id, is_deleted, rca_date])
+  @@index([workspace_id, status])
   @@index([status])
-  @@index([project_id])
   @@index([rca_date])
   @@index([severity])
   @@map("rca")
 }
 
-// Yearly counter for RCA-YYYY-NNNN, incremented inside the RCA insert transaction.
+// Per-workspace yearly counter for RCA-YYYY-NNNN, incremented inside the RCA insert transaction.
 model RcaNumberSeq {
-  year       Int @id
-  last_value Int
+  workspace_id String @db.Uuid
+  year         Int
+  last_value   Int
 
+  @@id([workspace_id, year])
   @@map("rca_number_seq")
 }
 
@@ -252,7 +395,7 @@ model RcaTimeline {
   created_by     String?  @db.Uuid
 
   rca             Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
-  created_by_user User? @relation("TimelineCreatedBy", fields: [created_by], references: [id])
+  created_by_user User? @relation("TimelineCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
 
   @@index([rca_id])
   @@map("rca_timeline")
@@ -264,7 +407,7 @@ model RcaTeamSection {
   id                String           @id @default(uuid()) @db.Uuid
   rca_id            String           @db.Uuid
   team              Team
-  contributor_id    String?          @db.Uuid
+  contributor_name  String?          @db.VarChar(120)
   cause_category    CauseCategory?
   escape_analysis   String?
   extra_1           String?
@@ -275,7 +418,7 @@ model RcaTeamSection {
   target_date       DateTime?        @db.Date
   actual_date       DateTime?        @db.Date
   completion_status CompletionStatus @default(NOT_STARTED)
-  verified_by       String?          @db.Uuid
+  verified_by_name  String?          @db.VarChar(120)
   section_status    SectionStatus    @default(NOT_STARTED)
   submitted_at      DateTime?        @db.Timestamptz(3)
   version           Int              @default(1)
@@ -284,9 +427,7 @@ model RcaTeamSection {
   updated_by        String?          @db.Uuid
 
   rca              Rca         @relation(fields: [rca_id], references: [id], onDelete: Cascade)
-  contributor      User?       @relation("SectionContributor", fields: [contributor_id], references: [id])
-  verified_by_user User?       @relation("SectionVerifiedBy", fields: [verified_by], references: [id])
-  updated_by_user  User?       @relation("SectionUpdatedBy", fields: [updated_by], references: [id])
+  updated_by_user  User?       @relation("SectionUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
   whys             RcaWhy[]
   actions          RcaAction[]
 
@@ -323,7 +464,7 @@ model RcaAction {
 
   section         RcaTeamSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
   owner           User           @relation("ActionOwner", fields: [owner_id], references: [id])
-  created_by_user User?          @relation("ActionCreatedBy", fields: [created_by], references: [id])
+  created_by_user User?          @relation("ActionCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
   followup        RcaFollowup?
 
   @@index([owner_id, status, due_date])
@@ -344,8 +485,8 @@ model RcaFollowup {
   created_by String?   @db.Uuid
 
   rca             Rca        @relation(fields: [rca_id], references: [id], onDelete: Cascade)
-  owner           User?      @relation("FollowupOwner", fields: [owner_id], references: [id])
-  created_by_user User?      @relation("FollowupCreatedBy", fields: [created_by], references: [id])
+  owner           User?      @relation("FollowupOwner", fields: [owner_id], references: [id], onDelete: SetNull)
+  created_by_user User?      @relation("FollowupCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
   action          RcaAction? @relation(fields: [action_id], references: [id], onDelete: SetNull)
 
   @@index([rca_id])
@@ -369,7 +510,7 @@ model RcaAttachment {
   updated_at  DateTime @updatedAt @db.Timestamptz(3)
 
   rca      Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
-  uploader User? @relation(fields: [uploaded_by], references: [id])
+  uploader User? @relation(fields: [uploaded_by], references: [id], onDelete: SetNull)
 
   @@index([rca_id])
   @@map("rca_attachment")
@@ -378,15 +519,19 @@ model RcaAttachment {
 model RcaSignoff {
   id         String      @id @default(uuid()) @db.Uuid
   rca_id     String      @db.Uuid
-  role       SignoffRole
-  user_id    String?     @db.Uuid
-  signed_at  DateTime?   @db.Timestamptz(3)
+  role             SignoffRole
+  /// Person asked to sign this row (null: any OWNER/EDITOR of the RCA may sign).
+  assignee_user_id String?     @db.Uuid
+  /// Person who signed.
+  user_id          String?     @db.Uuid
+  signed_at        DateTime?   @db.Timestamptz(3)
   comment    String?
   created_at DateTime    @default(now()) @db.Timestamptz(3)
   updated_at DateTime    @updatedAt @db.Timestamptz(3)
 
-  rca  Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [user_id], references: [id])
+  rca      Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  user     User? @relation("SignoffSignedBy", fields: [user_id], references: [id], onDelete: SetNull)
+  assignee User? @relation("SignoffAssignee", fields: [assignee_user_id], references: [id], onDelete: SetNull)
 
   @@unique([rca_id, role])
   @@map("rca_signoff")
@@ -397,16 +542,22 @@ model AuditLog {
   entity    String   @db.VarChar(40)
   entity_id String   @db.Uuid
   // Owning RCA, so the audit screen can filter child-entity events by RCA.
-  rca_id    String?  @db.Uuid
-  action    String   @db.VarChar(20)
+  rca_id       String?  @db.Uuid
+  workspace_id String?  @db.Uuid
+  /// DATA (RCA changes) or SECURITY (login, password, email, invitation, export, delete).
+  category     String   @default("DATA") @db.VarChar(10)
+  action       String   @db.VarChar(30)
   old_value Json?
   new_value Json?
   user_id   String?  @db.Uuid
   at        DateTime @default(now()) @db.Timestamptz(3)
 
-  rca  Rca?  @relation(fields: [rca_id], references: [id])
-  user User? @relation(fields: [user_id], references: [id])
+  rca       Rca?       @relation(fields: [rca_id], references: [id])
+  workspace Workspace? @relation(fields: [workspace_id], references: [id])
+  user      User?      @relation(fields: [user_id], references: [id])
 
+  @@index([workspace_id, at])
+  @@index([category, user_id, at])
   @@index([rca_id, at])
   @@index([user_id, at])
   @@index([at])

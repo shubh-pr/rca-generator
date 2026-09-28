@@ -8,7 +8,7 @@ import type {
   Severity,
   SignoffRole,
   Team,
-  UserRole,
+  WorkspaceRole,
 } from '../api/types';
 
 export const SEVERITIES: Severity[] = ['P1', 'P2', 'P3', 'P4'];
@@ -27,16 +27,13 @@ export const CAUSE_CATEGORIES: CauseCategory[] = [
 ];
 export const ACTION_STATUSES: ActionStatus[] = ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'];
 export const DETECTION_METHODS: DetectionMethod[] = ['MONITORING', 'CLIENT_REPORT', 'QA', 'OTHER'];
-export const USER_ROLES: UserRole[] = ['ADMIN', 'PROJECT_OWNER', 'RCA_LEAD', 'DEV', 'QA', 'PROD', 'VIEWER'];
+export const WORKSPACE_ROLES: WorkspaceRole[] = ['OWNER', 'EDITOR', 'CONTRIBUTOR', 'VIEWER'];
 export const SIGNOFF_ROLES: SignoffRole[] = ['DEV_LEAD', 'QA_LEAD', 'PROD_LEAD', 'PROJECT_OWNER', 'RCA_LEAD'];
 
-export const ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN: 'Admin',
-  PROJECT_OWNER: 'Project Owner',
-  RCA_LEAD: 'RCA Team Leader',
-  DEV: 'Dev',
-  QA: 'QA',
-  PROD: 'Production',
+export const ROLE_LABEL: Record<WorkspaceRole, string> = {
+  OWNER: 'Owner',
+  EDITOR: 'Editor',
+  CONTRIBUTOR: 'Contributor',
   VIEWER: 'Viewer',
 };
 

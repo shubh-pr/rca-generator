@@ -4,19 +4,20 @@ import { z } from 'zod';
 import { currentUser } from '../auth/index.js';
 import { prisma } from '../db.js';
 import { pageResult, parsePage } from '../lib/pagination.js';
-import { can, ensure } from '../lib/permissions.js';
-import { idParam, parse, zDate, zUuid } from '../lib/validate.js';
-import { findRcaOr404, userRef } from '../services/rcaQueries.js';
+import { parse, zDate, zUuid } from '../lib/validate.js';
+import { canInWorkspace } from '../policy/policy.js';
+import { userRef } from '../services/rcaQueries.js';
 
 export const auditRouter = Router();
 
 const include = { user: userRef, rca: { select: { id: true, rca_number: true } } } satisfies Prisma.AuditLogInclude;
 
 const filterSchema = z.object({
+  workspace_id: zUuid.optional(),
   rca_id: zUuid.optional(),
-  rca_number: z.string().trim().optional(),
+  rca_number: z.string().trim().max(40).optional(),
   user_id: zUuid.optional(),
-  action: z.string().trim().max(20).optional(),
+  action: z.string().trim().max(30).optional(),
   entity: z.string().trim().max(40).optional(),
   date_from: zDate.optional(),
   date_to: zDate.optional(),
@@ -24,29 +25,16 @@ const filterSchema = z.object({
 
 const IST_OFFSET = 5.5 * 3_600_000;
 
-/** Change history of one RCA (SPEC 5.1: Lead, Owner, Admin). */
-auditRouter.get('/rcas/:id/audit', async (req, res) => {
-  const me = currentUser(req);
-  const { id } = parse(idParam, req.params);
-  await findRcaOr404(prisma, id);
-  ensure(can.viewRcaAudit(me));
-  const p = parsePage(req.query, ['at'], '-at');
-  const where = { rca_id: id };
-  const [data, total] = await Promise.all([
-    prisma.auditLog.findMany({ where, include, orderBy: [p.orderBy, { id: 'asc' }], skip: p.skip, take: p.take }),
-    prisma.auditLog.count({ where }),
-  ]);
-  res.json(pageResult(data, total, p));
-});
-
-/** Audit log screen: filter by RCA, user and date (SPEC 6.1: Owner and Admin). */
+/** Workspace audit log: data changes in workspaces where the user is OWNER or EDITOR. */
 auditRouter.get('/audit', async (req, res) => {
   const me = currentUser(req);
-  ensure(can.viewAuditLog(me));
   const raw = req.query as Record<string, unknown>;
   const f = parse(filterSchema, Object.fromEntries(Object.entries(raw).filter(([k, v]) => k in filterSchema.shape && v !== '')));
   const p = parsePage(req.query, ['at'], '-at');
-  const and: Prisma.AuditLogWhereInput[] = [];
+  const memberships = await prisma.workspaceMember.findMany({ where: { user_id: me.id } });
+  const allowed = memberships.filter((m) => canInWorkspace(m.role, 'audit.view')).map((m) => m.workspace_id);
+  const and: Prisma.AuditLogWhereInput[] = [{ category: 'DATA' }, { workspace_id: { in: allowed } }];
+  if (f.workspace_id) and.push({ workspace_id: f.workspace_id });
   if (f.rca_id) and.push({ rca_id: f.rca_id });
   if (f.rca_number) and.push({ rca: { rca_number: { contains: f.rca_number, mode: 'insensitive' } } });
   if (f.user_id) and.push({ user_id: f.user_id });

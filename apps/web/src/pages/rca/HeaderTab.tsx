@@ -2,35 +2,34 @@ import { useEffect, useMemo } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { Rca } from '../../api/types';
 import { ErrorBanner } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { isoToIstInput } from '../../lib/dates';
-import { can } from '../../lib/permissions';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { HeaderFields, headerToBody, type HeaderValues } from './HeaderFields';
 import { useRcaMutation } from './rcaApi';
 
 export function HeaderTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) => void }) {
-  const { user } = useAuth();
   const initial = useMemo<HeaderValues>(
     () => ({
       rca_date: rca.rca_date,
-      project_id: rca.project_id,
-      team_leader_id: rca.team_leader_id,
+      company_name: rca.company_name ?? '',
+      project_name: rca.project_name ?? '',
+      project_owner_name: rca.project_owner_name ?? '',
+      team_leader_name: rca.team_leader_name ?? '',
       ticket_id: rca.ticket_id ?? '',
       severity: rca.severity,
       environment: rca.environment,
       incident_start: isoToIstInput(rca.incident_start),
       detected_at: isoToIstInput(rca.detected_at),
       resolved_at: isoToIstInput(rca.resolved_at),
-      prepared_by: rca.prepared_by ?? '',
-      reviewed_by: rca.reviewed_by ?? '',
+      prepared_by_name: rca.prepared_by_name ?? '',
+      reviewed_by_name: rca.reviewed_by_name ?? '',
     }),
     [rca],
   );
   const form = useDirtyForm(initial);
   useEffect(() => onDirty(form.dirty), [form.dirty, onDirty]);
   const save = useRcaMutation(rca.id, () => api.patch(`/rcas/${rca.id}`, headerToBody(form.values)));
-  const editable = can.editCommon(user) && rca.status !== 'CLOSED';
+  const editable = rca.permissions.edit && rca.status !== 'CLOSED';
   const errors = save.error instanceof ApiError ? save.error.fields : {};
 
   return (
@@ -38,7 +37,7 @@ export function HeaderTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
       <h2>Header</h2>
       {!editable && <ReadOnlyNote closed={rca.status === 'CLOSED'} />}
       <ErrorBanner error={save.error} />
-      <HeaderFields values={form.values} set={form.set} errors={errors} disabled={!editable} rcaNumber={rca.rca_number} />
+      <HeaderFields values={form.values} set={form.set} errors={errors} disabled={!editable} rcaNumber={rca.rca_number} workspaceId={rca.workspace_id} />
       {editable && (
         <div className="flex justify-end gap-2">
           <button type="button" className="btn-secondary" disabled={!form.dirty} onClick={form.reset}>

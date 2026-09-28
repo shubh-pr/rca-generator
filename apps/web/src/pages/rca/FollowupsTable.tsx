@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
-import { useUsers } from '../../api/hooks';
+import { useParticipants } from '../../api/hooks';
 import type { Followup, Rca } from '../../api/types';
 import { Select, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
-import { can } from '../../lib/permissions';
 import { useRcaMutation } from './rcaApi';
 
 interface Row extends Record<string, unknown> {
@@ -15,9 +13,8 @@ interface Row extends Record<string, unknown> {
 const toRow = (f?: Followup): Row => ({ risk: f?.risk ?? '', owner_id: f?.owner_id ?? '', due_date: f?.due_date ?? '' });
 
 export function FollowupsTable({ rca }: { rca: Rca }) {
-  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
-  const editable = can.manageFollowups(user) && rca.status !== 'CLOSED';
+  const editable = rca.permissions.manage_followups && rca.status !== 'CLOSED';
   return (
     <div className="overflow-x-auto">
       <table className="table" aria-label="Follow-ups">
@@ -53,7 +50,7 @@ export function FollowupsTable({ rca }: { rca: Rca }) {
 }
 
 function FollowupRow({ rca, followup, editable, onDone }: { rca: Rca; followup?: Followup; editable: boolean; onDone?: () => void }) {
-  const users = useUsers({ activeOnly: true });
+  const users = useParticipants(rca.id);
   const [v, setV] = useState(toRow(followup));
   const dirty = JSON.stringify(v) !== JSON.stringify(toRow(followup));
   const body = { risk: v.risk, owner_id: v.owner_id || null, due_date: v.due_date || null };

@@ -6,7 +6,6 @@ import type { AuditEntry, Paged, Rca, TeamSection } from '../../api/types';
 import { ActionStatusChip, SectionBadge } from '../../components/Chips';
 import { ErrorBanner } from '../../components/Form';
 import { BlamelessNote } from '../../components/Layout';
-import { useAuth } from '../../lib/auth';
 import { formatDate, formatDateTime, formatMinutes } from '../../lib/dates';
 import {
   ACTION_STATUS_LABEL,
@@ -19,7 +18,6 @@ import {
   TEAM_LABEL,
   TEAM_PROMPTS,
 } from '../../lib/labels';
-import { can } from '../../lib/permissions';
 import { useRca } from './rcaApi';
 import { RcaTitleBar } from './RcaTitleBar';
 
@@ -27,7 +25,6 @@ import { RcaTitleBar } from './RcaTitleBar';
 export function RcaViewPage() {
   const { id = '' } = useParams();
   const rca = useRca(id);
-  const { user } = useAuth();
   if (rca.isLoading) return <div className="text-slate-500">Loading…</div>;
   if (rca.error || !rca.data) return <ErrorBanner error={rca.error ?? 'RCA not found'} />;
   const r = rca.data;
@@ -41,10 +38,10 @@ export function RcaViewPage() {
           <KV label="RCA number" value={r.rca_number} />
           <KV label="Date" value={formatDate(r.rca_date)} />
           <KV label="Status" value={`${STATUS_LABEL[r.status]} (v${r.version})`} />
-          <KV label="Company" value={r.project.company.name} />
-          <KV label="Project" value={r.project.name} />
-          <KV label="Project Owner" value={r.project.owner.name} />
-          <KV label="RCA Team Leader" value={r.team_leader.name} />
+          <KV label="Company" value={r.company_name} />
+          <KV label="Project" value={r.project_name} />
+          <KV label="Project Owner" value={r.project_owner_name} />
+          <KV label="RCA Team Leader" value={r.team_leader_name} />
           <KV label="Ticket / incident ID" value={r.ticket_id} />
           <KV label="Severity" value={r.severity} />
           <KV label="Environment" value={ENV_LABEL[r.environment]} />
@@ -52,8 +49,8 @@ export function RcaViewPage() {
           <KV label="Detected at" value={formatDateTime(r.detected_at)} />
           <KV label="Resolved at" value={formatDateTime(r.resolved_at)} />
           <KV label="Time to detect" value={formatMinutes(r.time_to_detect_minutes)} />
-          <KV label="Prepared by" value={r.prepared_by_user?.name} />
-          <KV label="Reviewed by" value={r.reviewed_by_user?.name} />
+          <KV label="Prepared by" value={r.prepared_by_name} />
+          <KV label="Reviewed by" value={r.reviewed_by_name} />
         </Grid>
 
         <Section title="1. Common sections">
@@ -123,7 +120,7 @@ export function RcaViewPage() {
           </Sub>
         </Section>
       </div>
-      {can.viewRcaAudit(user) && <History rca={r} />}
+      <History rca={r} />
     </div>
   );
 }
@@ -140,7 +137,7 @@ function TeamBlock({ section: s, index }: { section: TeamSection; index: number 
       }
     >
       <Grid>
-        <KV label="Team lead / contributor" value={s.contributor?.name} />
+        <KV label="Team lead / contributor" value={s.contributor_name} />
         <KV label="Cause category" value={s.cause_category ? CAUSE_LABEL[s.cause_category] : null} />
       </Grid>
       <Table head={['Why', 'Answer']} rows={[1, 2, 3, 4, 5].map((n) => [n === 5 ? 'Why 5 (Root cause)' : `Why ${n}`, why(n)])} />
@@ -186,7 +183,8 @@ function TeamBlock({ section: s, index }: { section: TeamSection; index: number 
         <KV label="Target date" value={formatDate(s.target_date)} />
         <KV label="Actual date" value={formatDate(s.actual_date)} />
         <KV label="Completion status" value={ACTION_STATUS_LABEL[s.completion_status]} />
-        <KV label="Verified by" value={s.verified_by_user?.name} />
+        <KV label="Verified by" value={s.verified_by_name} />
+        <KV label="Last edited by" value={s.updated_by_user ? `${s.updated_by_user.name}, ${formatDateTime(s.updated_at)}` : null} />
       </Grid>
     </Sub>
   );

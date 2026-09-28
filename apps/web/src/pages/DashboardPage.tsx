@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link, useSearchParams } from 'react-router';
+import { Link } from 'react-router';
 import { api, buildQuery } from '../api/client';
-import { useProjects } from '../api/hooks';
 import type { CauseCategory, Severity, Team } from '../api/types';
 import { BarList } from '../components/BarList';
-import { ErrorBanner, Select } from '../components/Form';
+import { ErrorBanner } from '../components/Form';
+import { creatableWorkspaces } from '../lib/permissions';
+import { useAuth } from '../lib/auth';
+import { useWorkspace } from '../lib/workspace';
 import { CAUSE_LABEL, TEAM_LABEL } from '../lib/labels';
 
 interface Counted {
@@ -31,29 +33,36 @@ interface Summary {
 const listHref = (f: Record<string, string>) => `/rcas${buildQuery(f)}`;
 
 export function DashboardPage() {
-  const [params, setParams] = useSearchParams();
-  const projectId = params.get('project_id') ?? '';
-  const projects = useProjects();
+  const { user } = useAuth();
+  const { current, filter } = useWorkspace();
   const q = useQuery({
-    queryKey: ['dashboard', projectId],
-    queryFn: () => api.get<Summary>('/dashboard/summary', { project_id: projectId || undefined }),
+    queryKey: ['dashboard', filter.workspace_id ?? 'all'],
+    queryFn: () => api.get<Summary>('/dashboard/summary', filter),
   });
   const d = q.data;
+  const empty = d && d.kpis.open_rcas.count === 0 && d.charts.by_severity.every((x) => x.count === 0);
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1>Dashboard</h1>
-        <Select
-          className="w-64"
-          aria-label="Project filter"
-          placeholder="All projects"
-          value={projectId}
-          onChange={(e) => setParams(e.target.value ? { project_id: e.target.value } : {}, { replace: true })}
-          options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
-        />
+        <span className="text-sm text-slate-600">{current ? current.name : 'All workspaces'}</span>
       </div>
       <ErrorBanner error={q.error} />
+      {empty && (
+        <div className="card mb-6 space-y-2" data-testid="dashboard-empty">
+          <h2>No RCAs yet</h2>
+          <p className="text-slate-600">
+            Your numbers appear here once you record an incident. Each RCA walks you through the header, impact, the 5 Whys for
+            Dev, QA and Production, actions, sign-off and closing.
+          </p>
+          {creatableWorkspaces(user).length > 0 && (
+            <Link to="/rcas/new" className="btn-primary">
+              Create an RCA
+            </Link>
+          )}
+        </div>
+      )}
       {d && (
         <>
           <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">

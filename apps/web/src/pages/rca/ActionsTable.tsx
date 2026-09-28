@@ -1,12 +1,10 @@
 import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
-import { useUsers } from '../../api/hooks';
+import { useParticipants } from '../../api/hooks';
 import type { Action, ActionStatus, Rca, TeamSection } from '../../api/types';
 import { Select, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { todayIst } from '../../lib/dates';
 import { ACTION_STATUS_LABEL, ACTION_STATUSES } from '../../lib/labels';
-import { can } from '../../lib/permissions';
 import { MoveToFollowupButton } from './MoveToFollowupButton';
 import { useRcaMutation } from './rcaApi';
 
@@ -28,9 +26,8 @@ const toRow = (a?: Action): Row => ({
 
 /** Actions table: Action, Owner, Due date, Status; overdue rows red (SPEC 6.2). */
 export function ActionsTable({ rca, section }: { rca: Rca; section: TeamSection }) {
-  const { user } = useAuth();
   const [adding, setAdding] = useState(false);
-  const mayEdit = can.editSection(user, section.team) && rca.status !== 'CLOSED';
+  const mayEdit = rca.permissions.edit_section[section.team] && rca.status !== 'CLOSED';
   const locked = section.section_status === 'SUBMITTED';
 
   return (
@@ -85,8 +82,7 @@ function ActionRow({
   locked: boolean;
   onDone?: () => void;
 }) {
-  const users = useUsers({ activeOnly: true });
-  const { user } = useAuth();
+  const users = useParticipants(rca.id);
   const [v, setV] = useState<Row>(toRow(action));
   const dirty = JSON.stringify(v) !== JSON.stringify(toRow(action));
   const base = `/rcas/${rca.id}/sections/${section.team}/actions`;
@@ -166,7 +162,7 @@ function ActionRow({
             Delete
           </button>
         )}
-        {action && !dirty && can.manageFollowups(user) && <MoveToFollowupButton rca={rca} action={action} />}
+        {action && !dirty && rca.permissions.manage_followups && <MoveToFollowupButton rca={rca} action={action} />}
       </td>
     </tr>
   );

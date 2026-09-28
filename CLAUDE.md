@@ -24,12 +24,17 @@ their own section of an RCA, and any RCA can be printed or exported as PDF/DOCX.
 apps/api/                 Express API (npm workspace "@rca/api")
   prisma/schema.prisma    Data model (tables and columns are snake_case, as in the spec)
   prisma/migrations/      SQL migrations (incl. CHECK constraints and the audit_log no-update trigger)
-  prisma/seed.ts          Idempotent seed (users per role, company, project, 2 RCAs)
+  prisma/seed.ts          Demo seed, only with NODE_ENV=development and SEED_DEMO=true (demo workspace + 2 RCAs)
+  prisma/migrations/*/down.sql  Hand-written reverse migration where the up migration moves data
+  scripts/purge-demo-data.ts    Deletes all @rca.local demo data; needs --confirm
   src/app.ts              Express app factory (used by server.ts and tests)
   src/server.ts           HTTP entry point
-  src/auth/               ALL auth code: passwords, JWT, middleware, /auth routes (swap for SSO here)
-  src/lib/                errors, validation helpers, permissions, audit, pagination, dates
-  src/routes/             One router per resource (rcas, sections, workflow, masters, ...)
+  src/auth/               ALL auth code: passwords, JWT, middleware (builds the tenant scope), /auth routes
+  src/tenancy/            Request scope (AsyncLocalStorage) + Prisma extension that filters every tenant query
+  src/policy/             policy.ts: can()/authorize() for every action; access.ts: resolves a user's RCA access
+  src/lib/                errors, validation helpers, audit, pagination, dates
+  src/routes/             Collection routes (rcas, workspaces, audit, dashboard, exports)
+  src/routes/rca/         Every /rcas/:id/... route, mounted behind rcaAccessMiddleware
   src/services/           Business logic (RCA number, workflow rules, queries)
   src/export/             print HTML, PDF, DOCX, CSV/XLSX
   test/                   Vitest API tests (supertest), run against the rca_test database
@@ -55,7 +60,12 @@ docs/                     Spec, assumptions, plan
   `VALIDATION` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404),
   `CONFLICT`/`VERSION_CONFLICT` (409), `BUSINESS_RULE` (422).
 - Date-only columns are sent as `YYYY-MM-DD`; timestamps as ISO 8601 UTC. The UI displays IST (Asia/Kolkata).
-- Every permission check happens on the server (`src/lib/permissions.ts`); the web mirror only greys out fields.
+- **Tenancy:** every RCA belongs to a workspace. Tenant queries are filtered automatically by the Prisma extension in
+  `src/tenancy/prismaScope.ts` using the request scope set by `requireAuth`. Outside a request, wrap work in
+  `unscoped('reason', fn)`; never import the raw PrismaClient. Unknown or invisible RCAs are 404, never 403.
+- **Authorization:** only `src/policy/policy.ts` decides (`authorize(ctx, action, resource)`); routes hold no role logic.
+  New `/rcas/:id/...` routes go in `src/routes/rca/` (mounted behind `rcaAccessMiddleware`) and need a case in
+  `test/isolation.test.ts` (its coverage check fails otherwise). The web app reads `rca.permissions`; it never re-derives roles.
 - Every create/update/submit/sign/close/reopen/export writes `audit_log` via `src/lib/audit.ts`, in the same transaction.
 
 ## Commands (run from the repo root)
@@ -66,7 +76,7 @@ npx playwright install chromium      # browser for PDF export + e2e (once)
 cp apps/api/.env.example apps/api/.env
 docker compose up -d db              # start postgres only (host port 5433; override with DB_PORT)
 npm run db:migrate                   # prisma migrate deploy (dev DB)
-npm run db:seed                      # seed users/company/project/sample RCAs (idempotent)
+npm run db:seed                      # demo data (needs NODE_ENV=development SEED_DEMO=true in apps/api/.env)
 npm run dev                          # api on :4000, web on :5173 (proxies /api)
 npm run lint                         # eslint + tsc --noEmit for both apps
 npm test                             # API tests on rca_test (created/migrated automatically) + web unit tests
@@ -81,6 +91,7 @@ New migration during development: `npm run db:migrate:dev -- --name <name>` (run
 - Never run `prisma migrate reset` (Prisma blocks it for AI agents). Test databases are prepared by
   `migrate deploy` + TRUNCATE; the scripts refuse any database not named `*_test` / `*_e2e`.
 - Tests share one database and run serially (`fileParallelism: false`); each file calls `resetDb()`.
+  Use `createUser()` / `createTeam()` from `test/helpers.ts`; read or write fixtures directly with `raw(() => db...)`.
 - `/rcas/export` must stay registered before `/rcas/:id` routes (see `src/app.ts`).
 - The print HTML (`src/export/printHtml.ts`) and DOCX (`src/export/docx.ts`) both render
   `src/export/model.ts`; change the template order there, not in each renderer.

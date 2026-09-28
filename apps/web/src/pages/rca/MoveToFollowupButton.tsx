@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, ApiError } from '../../api/client';
-import { useUsers } from '../../api/hooks';
+import { useParticipants } from '../../api/hooks';
 import type { Action, Rca } from '../../api/types';
 import { ErrorBanner, Field, Modal, Select, TextInput } from '../../components/Form';
 import { useRcaMutation } from './rcaApi';
@@ -20,7 +20,7 @@ export function MoveToFollowupButton({ rca, action }: { rca: Rca; action: Action
 }
 
 function MoveModal({ rca, action, onClose }: { rca: Rca; action: Action; onClose: () => void }) {
-  const users = useUsers({ activeOnly: true });
+  const users = useParticipants(rca.id);
   const [v, setV] = useState({ risk: action.action, owner_id: action.owner_id, due_date: action.due_date });
   const move = useRcaMutation(rca.id, () => api.post(`/rcas/${rca.id}/followups`, { ...v, action_id: action.id }));
   const fields = move.error instanceof ApiError ? move.error.fields : {};

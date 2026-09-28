@@ -17,7 +17,7 @@ export type CauseCategory =
 export type ActionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 export type CompletionStatus = ActionStatus;
 export type DetectionMethod = 'MONITORING' | 'CLIENT_REPORT' | 'QA' | 'OTHER';
-export type UserRole = 'ADMIN' | 'PROJECT_OWNER' | 'RCA_LEAD' | 'DEV' | 'QA' | 'PROD' | 'VIEWER';
+export type WorkspaceRole = 'OWNER' | 'EDITOR' | 'CONTRIBUTOR' | 'VIEWER';
 export type SignoffRole = 'PROJECT_OWNER' | 'RCA_LEAD' | 'DEV_LEAD' | 'QA_LEAD' | 'PROD_LEAD';
 
 export interface Paged<T> {
@@ -27,18 +27,25 @@ export interface Paged<T> {
   total: number;
 }
 
+export interface WorkspaceRef {
+  id: string;
+  name: string;
+  is_personal: boolean;
+  is_primary_owner: boolean;
+  role: WorkspaceRole;
+  team: Team | null;
+}
+
 export interface Me {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
-  team: Team | null;
-}
-
-export interface User extends Me {
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  email_verified: boolean;
+  is_platform_admin: boolean;
+  onboarded: boolean;
+  has_password: boolean;
+  shared_rca_count: number;
+  workspaces: WorkspaceRef[];
 }
 
 export interface UserRef {
@@ -47,19 +54,9 @@ export interface UserRef {
   email?: string;
 }
 
-export interface Company {
-  id: string;
-  name: string;
-  created_at: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  company_id: string;
-  owner_user_id: string;
-  company: { id: string; name: string };
-  owner: UserRef;
+export interface Participant extends UserRef {
+  role: WorkspaceRole;
+  team: Team | null;
 }
 
 export interface TimelineEvent {
@@ -95,8 +92,7 @@ export interface TeamSection {
   id: string;
   rca_id: string;
   team: Team;
-  contributor_id: string | null;
-  contributor: UserRef | null;
+  contributor_name: string | null;
   cause_category: CauseCategory | null;
   escape_analysis: string | null;
   extra_1: string | null;
@@ -107,8 +103,8 @@ export interface TeamSection {
   target_date: string | null;
   actual_date: string | null;
   completion_status: CompletionStatus;
-  verified_by: string | null;
-  verified_by_user: UserRef | null;
+  verified_by_name: string | null;
+  updated_by_user: UserRef | null;
   section_status: SectionStatus;
   submitted_at: string | null;
   version: number;
@@ -144,6 +140,8 @@ export interface Attachment {
 export interface Signoff {
   id: string;
   role: SignoffRole;
+  assignee_user_id: string | null;
+  assignee: UserRef | null;
   user_id: string | null;
   user: UserRef | null;
   signed_at: string | null;
@@ -152,6 +150,8 @@ export interface Signoff {
 
 export interface RcaSummary {
   id: string;
+  workspace_id: string;
+  workspace: { id: string; name: string };
   rca_number: string;
   rca_date: string;
   severity: Severity;
@@ -160,23 +160,45 @@ export interface RcaSummary {
   version: number;
   summary: string;
   ticket_id: string | null;
-  project: { id: string; name: string; company: { id: string; name: string } };
-  team_leader: UserRef;
+  company_name: string | null;
+  project_name: string | null;
+  team_leader_name: string | null;
+  is_sample: boolean;
   sections: { team: Team; section_status: SectionStatus }[];
   has_overdue: boolean;
 }
 
-export interface Rca extends Omit<RcaSummary, 'project'> {
-  project_id: string;
-  team_leader_id: string;
+/** Evaluated server-side by the policy module; the UI only uses it to enable controls. */
+export interface RcaPermissions {
+  role: WorkspaceRole;
+  teams: Team[];
+  support: boolean;
+  edit: boolean;
+  delete: boolean;
+  review: boolean;
+  close: boolean;
+  reopen: boolean;
+  unlock_section: boolean;
+  add_timeline: boolean;
+  edit_timeline: boolean;
+  manage_followups: boolean;
+  add_attachment: boolean;
+  assign_signoff: boolean;
+  export: boolean;
+  edit_section: Record<Team, boolean>;
+  sign: Record<SignoffRole, boolean>;
+  delete_attachment: Record<string, boolean>;
+}
+
+export interface Rca extends Omit<RcaSummary, 'sections' | 'workspace'> {
+  workspace: { id: string; name: string; is_personal: boolean };
   incident_start: string;
   detected_at: string | null;
   resolved_at: string | null;
   time_to_detect_minutes: number | null;
-  prepared_by: string | null;
-  reviewed_by: string | null;
-  prepared_by_user: UserRef | null;
-  reviewed_by_user: UserRef | null;
+  project_owner_name: string | null;
+  prepared_by_name: string | null;
+  reviewed_by_name: string | null;
   impact_users: string | null;
   impact_duration: string | null;
   impact_data_revenue: string | null;
@@ -190,12 +212,12 @@ export interface Rca extends Omit<RcaSummary, 'project'> {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
-  project: Project;
   timeline: TimelineEvent[];
   sections: TeamSection[];
   followups: Followup[];
   attachments: Attachment[];
   signoffs: Signoff[];
+  permissions: RcaPermissions;
 }
 
 export interface AuditEntry {

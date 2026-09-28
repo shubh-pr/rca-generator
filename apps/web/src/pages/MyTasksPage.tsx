@@ -12,10 +12,11 @@ interface RcaRef {
   rca_number: string;
   severity: Severity;
   summary?: string;
-  project: { name: string };
+  project_name?: string | null;
 }
 
 interface Tasks {
+  signoffs: { id: string; role: string; rca: RcaRef }[];
   sections: { id: string; team: Team; section_status: SectionStatus; due_date: string | null; rca: RcaRef & { rca_date: string } }[];
   actions: {
     id: string;
@@ -56,7 +57,7 @@ export function MyTasksPage() {
                   </Link>
                   <div className="max-w-md truncate text-xs text-slate-500">{s.rca.summary}</div>
                 </td>
-                <td>{s.rca.project.name}</td>
+                <td>{s.rca.project_name}</td>
                 <td>
                   <SeverityChip value={s.rca.severity} />
                 </td>
@@ -118,6 +119,31 @@ export function MyTasksPage() {
           </tbody>
         </table>
       </div>
+      {q.data && q.data.signoffs.length > 0 && (
+        <div className="card overflow-x-auto">
+          <h2 className="mb-2">Sign-offs assigned to me</h2>
+          <table className="table" data-testid="my-signoffs">
+            <thead>
+              <tr>
+                <th>RCA</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              {q.data.signoffs.map((s) => (
+                <tr key={s.id}>
+                  <td>
+                    <Link to={`/rcas/${s.rca.id}/edit?tab=closing`} className="text-navy underline">
+                      {s.rca.rca_number}
+                    </Link>
+                  </td>
+                  <td>{s.role.replace('_', ' ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

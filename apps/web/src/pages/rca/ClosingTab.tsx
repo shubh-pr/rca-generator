@@ -2,8 +2,6 @@ import { useEffect, useMemo } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { Rca } from '../../api/types';
 import { ErrorBanner, Field, TextArea } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
-import { can } from '../../lib/permissions';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { AttachmentsPanel } from './AttachmentsPanel';
 import { FollowupsTable } from './FollowupsTable';
@@ -12,7 +10,6 @@ import { useRcaMutation } from './rcaApi';
 import { SignoffTable } from './SignoffTable';
 
 export function ClosingTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) => void }) {
-  const { user } = useAuth();
   const initial = useMemo(
     () => ({ lessons_well: rca.lessons_well ?? '', lessons_not_well: rca.lessons_not_well ?? '', lessons_key: rca.lessons_key ?? '' }),
     [rca],
@@ -20,7 +17,7 @@ export function ClosingTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =
   const form = useDirtyForm(initial);
   useEffect(() => onDirty(form.dirty), [form.dirty, onDirty]);
   const save = useRcaMutation(rca.id, () => api.patch(`/rcas/${rca.id}`, form.values));
-  const editable = can.editCommon(user) && rca.status !== 'CLOSED';
+  const editable = rca.permissions.edit && rca.status !== 'CLOSED';
   const fields = save.error instanceof ApiError ? save.error.fields : {};
 
   return (

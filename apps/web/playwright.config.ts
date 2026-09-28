@@ -29,6 +29,8 @@ export default defineConfig({
         DATABASE_URL: DB,
         PORT: String(API_PORT),
         JWT_SECRET: 'e2e-secret',
+        NODE_ENV: 'development',
+        SEED_DEMO: 'true',
         UPLOAD_DIR: './test-uploads/e2e',
         CORS_ORIGIN: `http://localhost:${WEB_PORT}`,
       },

@@ -2,17 +2,14 @@ import { useEffect, useMemo } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { DetectionMethod, Rca } from '../../api/types';
 import { ErrorBanner, Field, Select, TextArea, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { formatDateTime, formatMinutes } from '../../lib/dates';
 import { DETECTION_LABEL, DETECTION_METHODS } from '../../lib/labels';
-import { can } from '../../lib/permissions';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { ReadOnlyNote } from './HeaderTab';
 import { useRcaMutation } from './rcaApi';
 import { TimelineTable } from './TimelineTable';
 
 export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) => void }) {
-  const { user } = useAuth();
   const initial = useMemo(
     () => ({
       summary: rca.summary,
@@ -32,7 +29,7 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
   const save = useRcaMutation(rca.id, () =>
     api.patch(`/rcas/${rca.id}`, { ...v, detection_method: v.detection_method || null }),
   );
-  const editable = can.editCommon(user) && rca.status !== 'CLOSED';
+  const editable = rca.permissions.edit && rca.status !== 'CLOSED';
   const errors = save.error instanceof ApiError ? save.error.fields : {};
 
   return (

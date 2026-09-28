@@ -14,8 +14,9 @@ export interface ListRca {
   detected_at: Date | null;
   resolved_at: Date | null;
   closed_at: Date | null;
-  project: { name: string; company: { name: string } };
-  team_leader: { name: string };
+  company_name: string | null;
+  project_name: string | null;
+  team_leader_name: string | null;
   sections: {
     team: string;
     section_status: string;
@@ -35,7 +36,7 @@ export function listTable(rcas: ListRca[], perAction: boolean): { head: string[]
         r.sections.flatMap((s) =>
           s.actions.map((a) => [
             r.rca_number,
-            r.project.name,
+            r.project_name ?? '',
             r.status,
             s.team,
             a.seq ?? '',
@@ -82,13 +83,13 @@ export function listTable(rcas: ListRca[], perAction: boolean): { head: string[]
       return [
         r.rca_number,
         formatDateOnly(r.rca_date),
-        r.project.company.name,
-        r.project.name,
+        r.company_name ?? '',
+        r.project_name ?? '',
         r.severity,
         r.environment,
         r.status,
         r.version,
-        r.team_leader.name,
+        r.team_leader_name ?? '',
         r.ticket_id ?? '',
         r.summary,
         formatIstDateTime(r.incident_start),

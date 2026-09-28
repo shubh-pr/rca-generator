@@ -2,19 +2,16 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import { Layout } from './components/Layout';
 import { useAuth } from './lib/auth';
-import { can, homeFor } from './lib/permissions';
-import { CompaniesPage } from './pages/admin/CompaniesPage';
-import { ProjectsPage } from './pages/admin/ProjectsPage';
-import { UsersPage } from './pages/admin/UsersPage';
+import { auditWorkspaces, homeFor } from './lib/permissions';
+import { AuditLogPage } from './pages/AuditLogPage';
 import { DashboardPage } from './pages/DashboardPage';
-import { MyTasksPage } from './pages/MyTasksPage';
 import { LoginPage } from './pages/LoginPage';
+import { MyTasksPage } from './pages/MyTasksPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
 import { RcaListPage } from './pages/rca/RcaListPage';
 import { RcaNewPage } from './pages/rca/RcaNewPage';
 import { RcaPrintPage } from './pages/rca/RcaPrintPage';
 import { RcaViewPage } from './pages/rca/RcaViewPage';
-import { AuditLogPage } from './pages/AuditLogPage';
 
 function RequireAuth() {
   const { user, loading } = useAuth();
@@ -23,14 +20,9 @@ function RequireAuth() {
   return <Outlet />;
 }
 
-function AdminOnly({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  return can.manageMasters(user) ? children : <Navigate to="/" replace />;
-}
-
 function AuditOnly({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  return can.viewAuditLog(user) ? children : <Navigate to="/" replace />;
+  return auditWorkspaces(user).length ? children : <Navigate to="/" replace />;
 }
 
 function Home() {
@@ -55,9 +47,6 @@ export const router = createBrowserRouter([
           { path: 'rcas/:id', element: <RcaViewPage /> },
           { path: 'rcas/:id/edit', element: <RcaEditPage /> },
           { path: 'audit', element: <AuditOnly><AuditLogPage /></AuditOnly> },
-          { path: 'admin/users', element: <AdminOnly><UsersPage /></AdminOnly> },
-          { path: 'admin/projects', element: <AdminOnly><ProjectsPage /></AdminOnly> },
-          { path: 'admin/companies', element: <AdminOnly><CompaniesPage /></AdminOnly> },
           { path: '*', element: <Navigate to="/" replace /> },
         ],
       },

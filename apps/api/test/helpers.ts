@@ -1,10 +1,11 @@
 import http from 'node:http';
-import type { Team, UserRole } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import type { Team, WorkspaceRole } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { signAccessToken } from '../src/auth/jwt.js';
+import { hashPassword } from '../src/auth/password.js';
 import { prisma } from '../src/db.js';
+import { unscoped } from '../src/tenancy/context.js';
 
 export const app = createApp();
 // One server bound explicitly to 127.0.0.1. supertest's default (a new ephemeral server per request on
@@ -12,12 +13,21 @@ export const app = createApp();
 const server = http.createServer(app).listen(0, '127.0.0.1');
 server.unref();
 export const api = () => request(server);
-export { prisma };
 
-export const PASSWORD = 'Password@123';
+/** Direct DB access for tests (bypasses the tenant filter on purpose). */
+export const db = prisma;
+export const raw = <T>(fn: () => Promise<T>) => unscoped('test fixture', fn);
+
+export const PASSWORD = 'Correct-Horse-9';
 
 const TABLES = [
   'audit_log',
+  'support_grants',
+  'usage_quotas',
+  'refresh_tokens',
+  'email_tokens',
+  'invitations',
+  'rca_collaborators',
   'rca_signoff',
   'rca_attachment',
   'rca_followup',
@@ -27,8 +37,8 @@ const TABLES = [
   'rca_timeline',
   'rca',
   'rca_number_seq',
-  'projects',
-  'companies',
+  'workspace_members',
+  'workspaces',
   'users',
 ];
 
@@ -36,47 +46,76 @@ export async function resetDb() {
   await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((t) => `"${t}"`).join(', ')} CASCADE`);
 }
 
-export type RoleKey = 'ADMIN' | 'PROJECT_OWNER' | 'RCA_LEAD' | 'DEV' | 'QA' | 'PROD' | 'VIEWER';
-export const ROLE_KEYS: RoleKey[] = ['ADMIN', 'PROJECT_OWNER', 'RCA_LEAD', 'DEV', 'QA', 'PROD', 'VIEWER'];
-
 export interface Actor {
   id: string;
+  name: string;
   email: string;
-  role: UserRole;
   token: string;
+  /** The user's personal workspace. */
+  personalWorkspaceId: string;
 }
 
 let hash: string | undefined;
+let counter = 0;
 
-/** One active user per role, with a ready bearer token. */
-export async function createActors(): Promise<Record<RoleKey, Actor>> {
-  hash ??= await bcrypt.hash(PASSWORD, 4);
-  const out = {} as Record<RoleKey, Actor>;
-  for (const role of ROLE_KEYS) {
-    const team: Team | null = role === 'DEV' || role === 'QA' || role === 'PROD' ? role : null;
-    const email = `${role.toLowerCase()}@test.local`;
+/** A verified user with a personal workspace and a ready bearer token. */
+export async function createUser(name = 'User', opts: { verified?: boolean; email?: string; platformAdmin?: boolean } = {}): Promise<Actor> {
+  hash ??= await hashPassword(PASSWORD);
+  counter += 1;
+  const email = opts.email ?? `${name.toLowerCase().replace(/[^a-z0-9]+/g, '.')}.${counter}@test.local`;
+  return raw(async () => {
     const user = await prisma.user.create({
-      data: { name: `${role} User`, email, role, team, password_hash: hash },
+      data: {
+        name,
+        email,
+        password_hash: hash,
+        email_verified_at: opts.verified === false ? null : new Date(),
+        is_platform_admin: opts.platformAdmin ?? false,
+      },
     });
-    out[role] = { id: user.id, email, role, token: signAccessToken({ sub: user.id, role }) };
-  }
-  return out;
+    const ws = await prisma.workspace.create({
+      data: { name: `${name}'s workspace`, owner_id: user.id, is_personal: true, members: { create: { user_id: user.id, role: 'OWNER' } } },
+    });
+    return { id: user.id, name, email, token: signAccessToken({ sub: user.id }), personalWorkspaceId: ws.id };
+  });
 }
 
-/** Company + project owned by the PROJECT_OWNER actor. */
-export async function createProject(ownerId: string, name = 'Payment Gateway') {
-  const company = await prisma.company.create({ data: { name: `Company for ${name}` } });
-  const project = await prisma.project.create({ data: { company_id: company.id, name, owner_user_id: ownerId } });
-  return { company, project };
+export async function addMember(workspaceId: string, actor: Actor, role: WorkspaceRole, team: Team | null = null) {
+  await raw(() => prisma.workspaceMember.create({ data: { workspace_id: workspaceId, user_id: actor.id, role, team } }));
+}
+
+export async function addCollaborator(rcaId: string, actor: Actor, role: WorkspaceRole, team: Team | null = null) {
+  await raw(() => prisma.rcaCollaborator.create({ data: { rca_id: rcaId, user_id: actor.id, role, team } }));
+}
+
+export type RoleKey = 'OWNER' | 'EDITOR' | 'DEV' | 'QA' | 'PROD' | 'VIEWER' | 'OUTSIDER';
+export const MEMBER_KEYS: RoleKey[] = ['OWNER', 'EDITOR', 'DEV', 'QA', 'PROD', 'VIEWER'];
+
+/**
+ * A shared workspace owned by OWNER with an EDITOR, three team CONTRIBUTORs and a VIEWER, plus an
+ * OUTSIDER who only has their own personal workspace.
+ */
+export async function createTeam(): Promise<{ a: Record<RoleKey, Actor>; workspaceId: string }> {
+  const a = {} as Record<RoleKey, Actor>;
+  for (const k of [...MEMBER_KEYS, 'OUTSIDER'] as RoleKey[]) a[k] = await createUser(`${k[0]}${k.slice(1).toLowerCase()} User`);
+  const ws = await raw(() => prisma.workspace.create({ data: { name: 'Team workspace', owner_id: a.OWNER.id } }));
+  await addMember(ws.id, a.OWNER, 'OWNER');
+  await addMember(ws.id, a.EDITOR, 'EDITOR');
+  await addMember(ws.id, a.DEV, 'CONTRIBUTOR', 'DEV');
+  await addMember(ws.id, a.QA, 'CONTRIBUTOR', 'QA');
+  await addMember(ws.id, a.PROD, 'CONTRIBUTOR', 'PROD');
+  await addMember(ws.id, a.VIEWER, 'VIEWER');
+  return { a, workspaceId: ws.id };
 }
 
 export const bearer = (a: Actor) => ({ Authorization: `Bearer ${a.token}` });
 
-export function rcaBody(projectId: string, teamLeaderId: string, overrides: Record<string, unknown> = {}) {
+export function rcaBody(workspaceId: string, overrides: Record<string, unknown> = {}) {
   return {
+    workspace_id: workspaceId,
     rca_date: '2026-09-28',
-    project_id: projectId,
-    team_leader_id: teamLeaderId,
+    project_name: 'Payment Gateway',
+    company_name: 'Acme',
     ticket_id: 'INC-10452',
     severity: 'P2',
     environment: 'PROD',
@@ -87,8 +126,8 @@ export function rcaBody(projectId: string, teamLeaderId: string, overrides: Reco
 }
 
 /** Create an RCA through the API as the given actor; returns the response body. */
-export async function createRca(actor: Actor, projectId: string, teamLeaderId: string, overrides: Record<string, unknown> = {}) {
-  const res = await api().post('/api/v1/rcas').set(bearer(actor)).send(rcaBody(projectId, teamLeaderId, overrides));
+export async function createRca(actor: Actor, workspaceId: string, overrides: Record<string, unknown> = {}) {
+  const res = await api().post('/api/v1/rcas').set(bearer(actor)).send(rcaBody(workspaceId, overrides));
   if (res.status !== 201) throw new Error(`createRca failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
@@ -139,27 +178,26 @@ export const COMMON_COMPLETE = {
   immediate_fix: 'Rolled back release 4.2.1',
 };
 
-/** Complete header/common and submit all three sections with their own team users. */
-export async function prepareForReview(a: Record<RoleKey, Actor>, rcaId: string, actionStatus: 'COMPLETED' | 'IN_PROGRESS' = 'COMPLETED') {
-  const patch = await api().patch(`/api/v1/rcas/${rcaId}`).set(bearer(a.RCA_LEAD)).send(COMMON_COMPLETE);
+/** Complete header/common and submit the three sections, each by the given actor (default: its team contributor). */
+export async function prepareForReview(
+  a: Partial<Record<RoleKey, Actor>> & { EDITOR?: Actor; OWNER: Actor },
+  rcaId: string,
+  actionStatus: 'COMPLETED' | 'IN_PROGRESS' = 'COMPLETED',
+) {
+  const editor = a.EDITOR ?? a.OWNER;
+  const patch = await api().patch(`/api/v1/rcas/${rcaId}`).set(bearer(editor)).send(COMMON_COMPLETE);
   if (patch.status !== 200) throw new Error(`patch failed ${JSON.stringify(patch.body)}`);
   const actions: Record<string, { id: string }> = {};
   for (const team of ['DEV', 'QA', 'PROD'] as const) {
-    actions[team] = (await fillAndSubmitSection(a[team], rcaId, team, { actionStatus })).action;
+    actions[team] = (await fillAndSubmitSection(a[team] ?? a.OWNER, rcaId, team, { actionStatus })).action;
   }
   return actions;
 }
 
-export async function signAll(a: Record<RoleKey, Actor>, rcaId: string) {
-  const order: [RoleKey, string][] = [
-    ['DEV', 'DEV_LEAD'],
-    ['QA', 'QA_LEAD'],
-    ['PROD', 'PROD_LEAD'],
-    ['PROJECT_OWNER', 'PROJECT_OWNER'],
-    ['RCA_LEAD', 'RCA_LEAD'],
-  ];
-  for (const [actor, role] of order) {
-    const res = await api().post(`/api/v1/rcas/${rcaId}/signoffs/${role}`).set(bearer(a[actor])).send({});
+/** Sign all five rows as `signer` (an OWNER/EDITOR signs unassigned rows), team leads first. */
+export async function signAll(signer: Actor, rcaId: string) {
+  for (const role of ['DEV_LEAD', 'QA_LEAD', 'PROD_LEAD', 'PROJECT_OWNER', 'RCA_LEAD']) {
+    const res = await api().post(`/api/v1/rcas/${rcaId}/signoffs/${role}`).set(bearer(signer)).send({});
     if (res.status !== 200) throw new Error(`sign ${role} failed ${res.status} ${JSON.stringify(res.body)}`);
   }
 }

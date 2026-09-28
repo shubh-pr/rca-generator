@@ -1,28 +1,29 @@
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { useProjects } from '../../api/hooks';
 import { ErrorBanner, Pagination, Select, TextInput } from '../../components/Form';
 import { ProgressChips, SeverityChip, StatusChip } from '../../components/Chips';
 import { useAuth } from '../../lib/auth';
+import { useWorkspace } from '../../lib/workspace';
 import { formatDate } from '../../lib/dates';
 import { ENV_LABEL, ENVIRONMENTS, RCA_STATUSES, SEVERITIES, STATUS_LABEL, TEAM_LABEL, TEAMS } from '../../lib/labels';
-import { can } from '../../lib/permissions';
+import { creatableWorkspaces } from '../../lib/permissions';
 import { ListExportButtons } from './ListExportButtons';
 import { useRcaList } from './rcaApi';
 
-const FILTER_KEYS = ['status', 'project_id', 'severity', 'environment', 'team', 'date_from', 'date_to', 'q', 'open', 'overdue', 'closed_from', 'closed_to'];
+const FILTER_KEYS = ['status', 'project', 'severity', 'environment', 'team', 'date_from', 'date_to', 'q', 'open', 'overdue', 'closed_from', 'closed_to'];
 
 export function RcaListPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const projects = useProjects();
+  const { filter: wsFilter, current } = useWorkspace();
   const page = Number(params.get('page') ?? 1);
   const filters: Record<string, string> = {};
   for (const k of FILTER_KEYS) {
     const v = params.get(k);
     if (v) filters[k] = v;
   }
-  const list = useRcaList({ ...filters, page, page_size: 20, sort: params.get('sort') ?? '-rca_date' });
+  const list = useRcaList({ ...wsFilter, ...filters, page, page_size: 20, sort: params.get('sort') ?? '-rca_date' });
+  const hasAnyFilter = Object.keys(filters).length > 0;
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -37,8 +38,8 @@ export function RcaListPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1>RCA list</h1>
         <div className="flex gap-2">
-          <ListExportButtons filters={filters} />
-          {can.createRca(user) && (
+          <ListExportButtons filters={{ ...wsFilter, ...filters }} />
+          {creatableWorkspaces(user).length > 0 && (
             <button type="button" className="btn-primary" onClick={() => navigate('/rcas/new')}>
               + New RCA
             </button>
@@ -60,13 +61,7 @@ export function RcaListPage() {
           onChange={(e) => setFilter('status', e.target.value)}
           options={RCA_STATUSES.map((s) => ({ value: s, label: STATUS_LABEL[s] }))}
         />
-        <Select
-          aria-label="Project"
-          placeholder="All projects"
-          value={params.get('project_id') ?? ''}
-          onChange={(e) => setFilter('project_id', e.target.value)}
-          options={(projects.data ?? []).map((p) => ({ value: p.id, label: p.name }))}
-        />
+        <TextInput aria-label="Project" placeholder="Project" value={params.get('project') ?? ''} onChange={(e) => setFilter('project', e.target.value)} />
         <Select
           aria-label="Severity"
           placeholder="All severities"
@@ -140,7 +135,11 @@ export function RcaListPage() {
                 </td>
                 <td className="whitespace-nowrap">{formatDate(r.rca_date)}</td>
                 <td>
-                  <div>{r.project.name}</div>
+                  <div>
+                    {r.project_name ?? <span className="text-slate-400">No project</span>}
+                    {!current && <span className="ml-1 text-xs text-slate-500">· {r.workspace.name}</span>}
+                    {r.is_sample && <span className="ml-1 rounded bg-amber-100 px-1 text-xs font-semibold text-amber-800">Sample</span>}
+                  </div>
                   <div className="max-w-md truncate text-xs text-slate-500">{r.summary}</div>
                 </td>
                 <td>
@@ -149,7 +148,7 @@ export function RcaListPage() {
                 <td>
                   <StatusChip value={r.status} />
                 </td>
-                <td>{r.team_leader.name}</td>
+                <td>{r.team_leader_name}</td>
                 <td>
                   <ProgressChips sections={r.sections} />
                 </td>
@@ -158,7 +157,7 @@ export function RcaListPage() {
             {list.data?.data.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-6 text-center text-slate-500">
-                  No RCAs match these filters.
+                  {hasAnyFilter ? 'No RCAs match these filters.' : 'No RCAs yet. Create your first RCA to get started.'}
                 </td>
               </tr>
             )}

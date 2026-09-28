@@ -27,3 +27,6 @@ export const conflict = (message: string, details?: Record<string, unknown>, cod
 
 export const businessRule = (message: string, details?: Record<string, unknown>, fields?: FieldErrors) =>
   new HttpError(422, 'BUSINESS_RULE', message, fields, details);
+
+export const emailNotVerified = () =>
+  new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Verify your email address before creating RCAs');

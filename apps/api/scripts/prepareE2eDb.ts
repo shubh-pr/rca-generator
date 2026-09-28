@@ -21,8 +21,8 @@ const cwd = path.resolve(import.meta.dirname, '..');
 execSync('npx prisma migrate deploy', { cwd, stdio: 'inherit' });
 
 const db = new PrismaClient();
-await db.$executeRawUnsafe(
-  'TRUNCATE audit_log, rca_signoff, rca_attachment, rca_followup, rca_action, rca_why, rca_team_section, rca_timeline, rca, rca_number_seq, projects, companies, users CASCADE',
-);
+const tables = await db.$queryRaw<{ tablename: string }[]>`
+  SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
+await db.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(', ')} CASCADE`);
 await db.$disconnect();
 execSync('npx prisma db seed', { cwd, stdio: 'inherit' });

@@ -1,14 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef } from 'react';
 import { api, ApiError } from '../../api/client';
-import { useUsers } from '../../api/hooks';
 import type { CauseCategory, CompletionStatus, Rca, Team, TeamSection } from '../../api/types';
 import { SectionBadge } from '../../components/Chips';
 import { ErrorBanner, Field, Select, TextArea, TextInput } from '../../components/Form';
-import { useAuth } from '../../lib/auth';
 import { formatDateTime } from '../../lib/dates';
 import { ACTION_STATUS_LABEL, ACTION_STATUSES, CAUSE_CATEGORIES, CAUSE_LABEL, TEAM_LABEL, TEAM_PROMPTS } from '../../lib/labels';
-import { can } from '../../lib/permissions';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { ActionsTable } from './ActionsTable';
 import { ReadOnlyNote } from './HeaderTab';
@@ -19,7 +16,7 @@ const AUTOSAVE_MS = 60_000;
 function toForm(s: TeamSection) {
   const why = (n: number) => s.whys.find((w) => w.why_no === n)?.answer ?? '';
   return {
-    contributor_id: s.contributor_id ?? '',
+    contributor_name: s.contributor_name ?? '',
     cause_category: (s.cause_category ?? '') as CauseCategory | '',
     escape_analysis: s.escape_analysis ?? '',
     extra_1: s.extra_1 ?? '',
@@ -30,7 +27,7 @@ function toForm(s: TeamSection) {
     target_date: s.target_date ?? '',
     actual_date: s.actual_date ?? '',
     completion_status: s.completion_status as CompletionStatus,
-    verified_by: s.verified_by ?? '',
+    verified_by_name: s.verified_by_name ?? '',
     why_1: why(1),
     why_2: why(2),
     why_3: why(3),
@@ -44,7 +41,7 @@ type SectionForm = ReturnType<typeof toForm>;
 function toBody(v: SectionForm, version: number) {
   return {
     version,
-    contributor_id: v.contributor_id || null,
+    contributor_name: v.contributor_name,
     cause_category: v.cause_category || null,
     escape_analysis: v.escape_analysis,
     extra_1: v.extra_1,
@@ -55,24 +52,21 @@ function toBody(v: SectionForm, version: number) {
     target_date: v.target_date || null,
     actual_date: v.actual_date || null,
     completion_status: v.completion_status,
-    verified_by: v.verified_by || null,
+    verified_by_name: v.verified_by_name,
     whys: [1, 2, 3, 4, 5].map((n) => ({ why_no: n, answer: v[`why_${n}` as keyof SectionForm] as string })),
   };
 }
 
 export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDirty: (d: boolean) => void }) {
-  const { user } = useAuth();
   const qc = useQueryClient();
-  const users = useUsers({ activeOnly: true });
   const section = rca.sections.find((s) => s.team === team)!;
   const initial = useMemo(() => toForm(section), [section]);
   const form = useDirtyForm(initial);
   const v = form.values;
   const labels = TEAM_PROMPTS[team];
   const submitted = section.section_status === 'SUBMITTED';
-  const mayEdit = can.editSection(user, team);
+  const mayEdit = rca.permissions.edit_section[team];
   const editable = mayEdit && !submitted && rca.status !== 'CLOSED';
-  const userOptions = (users.data ?? []).map((u) => ({ value: u.id, label: u.name }));
 
   useEffect(() => onDirty(form.dirty), [form.dirty, onDirty]);
 
@@ -113,6 +107,11 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
           <SectionBadge value={section.section_status} />
           <span className="text-xs text-slate-500">version {section.version}</span>
           {section.submitted_at && <span className="text-xs text-slate-500">submitted {formatDateTime(section.submitted_at)}</span>}
+          {section.updated_by_user && (
+            <span className="text-xs text-slate-500" data-testid={`last-edited-${team}`}>
+              last edited by {section.updated_by_user.name} {formatDateTime(section.updated_at)}
+            </span>
+          )}
         </div>
         <div className="flex gap-2">
           {editable && (
@@ -125,7 +124,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
               </button>
             </>
           )}
-          {submitted && can.reopenSection(user) && rca.status === 'DRAFT' && (
+          {submitted && rca.permissions.unlock_section && rca.status === 'DRAFT' && (
             <button type="button" className="btn-secondary" disabled={unlock.isPending} onClick={() => unlock.mutate(undefined)}>
               Unlock
             </button>
@@ -133,8 +132,8 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
         </div>
       </div>
 
-      {!mayEdit && <ReadOnlyNote text={`Only the ${TEAM_LABEL[team]} team, the RCA Team Leader and Admin can edit this section.`} />}
-      {mayEdit && submitted && <ReadOnlyNote text="This section is submitted and locked. The RCA Team Leader or Admin can unlock it." />}
+      {!mayEdit && <ReadOnlyNote text={`Only owners, editors and the ${TEAM_LABEL[team]} contributor can edit this section.`} />}
+      {mayEdit && submitted && <ReadOnlyNote text="This section is submitted and locked. An owner or editor can unlock it." />}
       {conflict ? (
         <div className="flex items-center justify-between rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
           <span>This section was changed by someone else. Reload to get the latest version (your unsaved edits will be discarded).</span>
@@ -148,8 +147,8 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       {editable && form.dirty && <p className="text-xs text-slate-500">Unsaved changes are auto-saved every 60 seconds.</p>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field label="Team lead / RCA contributor" error={fields.contributor_id}>
-          <Select value={v.contributor_id} disabled={!editable} onChange={(e) => form.set('contributor_id', e.target.value)} options={userOptions} />
+        <Field label="Team lead / RCA contributor" error={fields.contributor_name}>
+          <TextInput value={v.contributor_name} disabled={!editable} onChange={(e) => form.set('contributor_name', e.target.value)} aria-label="Team lead" />
         </Field>
         <Field label="Cause category" error={fields.cause_category} htmlFor={`${team}-cause`}>
           <Select
@@ -229,8 +228,8 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
               options={ACTION_STATUSES.map((s) => ({ value: s, label: ACTION_STATUS_LABEL[s] }))}
             />
           </Field>
-          <Field label="Verified by" error={fields.verified_by}>
-            <Select value={v.verified_by} disabled={!editable} onChange={(e) => form.set('verified_by', e.target.value)} options={userOptions} />
+          <Field label="Verified by" error={fields.verified_by_name}>
+            <TextInput value={v.verified_by_name} disabled={!editable} onChange={(e) => form.set('verified_by_name', e.target.value)} aria-label="Verified by" />
           </Field>
         </div>
       </section>

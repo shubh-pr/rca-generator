@@ -112,7 +112,7 @@ export function buildExportModel(rca: FullRca | null, generatedAt = new Date()):
   return {
     title: 'Root Cause Analysis (RCA)',
     rcaNumber: r?.rca_number ?? '',
-    projectName: r?.project.name ?? '',
+    projectName: r?.project_name ?? '',
     severity: r?.severity ?? '',
     version: r?.version ?? 1,
     isDraft: r?.status !== 'CLOSED',
@@ -121,10 +121,10 @@ export function buildExportModel(rca: FullRca | null, generatedAt = new Date()):
     header: [
       { label: 'RCA number', value: v(r?.rca_number) },
       { label: 'Date', value: formatDateOnly(r?.rca_date) },
-      { label: 'Company', value: v(r?.project.company.name) },
-      { label: 'Project', value: v(r?.project.name) },
-      { label: 'Project Owner', value: v(r?.project.owner.name) },
-      { label: 'RCA Team Leader', value: v(r?.team_leader.name) },
+      { label: 'Company', value: v(r?.company_name) },
+      { label: 'Project', value: v(r?.project_name) },
+      { label: 'Project Owner', value: v(r?.project_owner_name) },
+      { label: 'RCA Team Leader', value: v(r?.team_leader_name) },
       { label: 'Ticket / incident ID', value: v(r?.ticket_id) },
       { label: 'Severity', value: v(r?.severity) },
       { label: 'Environment', value: r ? ENV[r.environment] : '' },
@@ -133,8 +133,8 @@ export function buildExportModel(rca: FullRca | null, generatedAt = new Date()):
       { label: 'Detected at', value: formatIstDateTime(r?.detected_at) },
       { label: 'Resolved at', value: formatIstDateTime(r?.resolved_at) },
       { label: 'Time to detect', value: r ? formatDuration(minutesBetween(r.incident_start, r.detected_at)) : '' },
-      { label: 'Prepared by', value: v(r?.prepared_by_user?.name) },
-      { label: 'Reviewed by', value: v(r?.reviewed_by_user?.name) },
+      { label: 'Prepared by', value: v(r?.prepared_by_name) },
+      { label: 'Reviewed by', value: v(r?.reviewed_by_name) },
     ],
     common: {
       problem: [{ label: 'Summary (2-3 lines)', value: v(r?.summary) }],
@@ -167,7 +167,7 @@ export function buildExportModel(rca: FullRca | null, generatedAt = new Date()):
         heading: `2.${i + 1} ${TEAM_LABEL[team]} section`,
         status: s ? STATUS[s.section_status] : '',
         fields: [
-          { label: 'Team lead / RCA contributor', value: v(s?.contributor?.name) },
+          { label: 'Team lead / RCA contributor', value: v(s?.contributor_name) },
           { label: 'Cause category', value: s?.cause_category ? CAUSE[s.cause_category] : '' },
         ],
         whys: {
@@ -204,7 +204,7 @@ export function buildExportModel(rca: FullRca | null, generatedAt = new Date()):
           { label: 'Target date', value: formatDateOnly(s?.target_date) },
           { label: 'Actual date', value: formatDateOnly(s?.actual_date) },
           { label: 'Completion status', value: s ? STATUS[s.completion_status] : '' },
-          { label: 'Verified by', value: v(s?.verified_by_user?.name) },
+          { label: 'Verified by', value: v(s?.verified_by_name) },
         ],
       };
     }),

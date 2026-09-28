@@ -24,6 +24,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-local-docker-secret}
       JWT_EXPIRES_IN: 8h
       CORS_ORIGIN: http://localhost:${WEB_PORT:-8080}
+      # Local stack only: demo data. docker-compose.prod.yml never sets these.
+      NODE_ENV: development
+      SEED_DEMO: "true"
     depends_on:
       db:
         condition: service_healthy

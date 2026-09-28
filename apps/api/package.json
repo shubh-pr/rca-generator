@@ -14,7 +14,8 @@
     "test": "vitest run",
     "postinstall": "prisma generate",
     "e2e:prepare": "tsx scripts/prepareE2eDb.ts",
-    "e2e:serve": "npm run e2e:prepare && tsx src/server.ts"
+    "e2e:serve": "npm run e2e:prepare && tsx src/server.ts",
+    "purge:demo": "tsx scripts/purge-demo-data.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -38,9 +39,11 @@
     "@types/multer": "^2.2.0",
     "@types/node": "^26.6.3",
     "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
     "jszip": "^3.10.2",
     "pdf-parse": "^1.1.4",
+    "pg": "^8.23.0",
     "prisma": "^6.19.3",
     "supertest": "^7.3.0",
     "tsx": "^4.23.15",
