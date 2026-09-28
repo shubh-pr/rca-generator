@@ -33,3 +33,13 @@ Where the spec (`docs/SPEC.md`) was silent or ambiguous I took the simplest reas
 - **Overdue action:** status is not COMPLETED, the due date is before today (IST), and the action has not been moved to follow-ups.
 - **Tab badges:** Header, Common and Closing have no status column. Their badge shows "Submitted" once the RCA has left DRAFT (Closing: once CLOSED), "In progress" when something is filled, and otherwise "Not started".
 - **Audit action names:** besides the spec's CREATE, UPDATE, SUBMIT, SIGN, CLOSE, REOPEN and EXPORT, the log uses `DELETE` (soft delete, removing a timeline row, attachment or action, deactivating a user) and `SEND_BACK` (IN_REVIEW to DRAFT).
+
+## Team sections and actions
+
+- **Version and actions:** only the section save (PUT) and submit/reopen increase the section `version`. Actions are separate rows with their own endpoints and do not increase the section version. Two people editing different actions never conflict.
+- **Submit version:** POST `…/submit` accepts an optional `version`. When it is sent and stale, the API returns 409 `VERSION_CONFLICT`.
+- **After submit:** the section fields and the action text, owner and due date are locked (409). Action `status` and `completed_on` stay editable by the team, Lead and Admin until the RCA is closed. Without that, the close rule ("every action is COMPLETED") could never be met, because all sections are submitted before review.
+- **Unlocking a section:** a Lead or Admin can unlock a section only while the RCA is DRAFT. In IN_REVIEW the reviewer uses send-back, and a CLOSED RCA must first be reopened.
+- **Whys 2–4 are optional** at submit, per "all 5 Whys (or at least Why 1 and Why 5)".
+- **Action status COMPLETED** does not require `completed_on`. The spec requires dates only for the section's completion status.
+- **Auto-save:** the team tab saves a draft every 60 seconds while it has unsaved edits. After a 409 it stops auto-saving until the user reloads.

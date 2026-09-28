@@ -8,6 +8,7 @@ import { jsonReplacer } from './lib/json.js';
 import { companiesRouter } from './routes/companies.js';
 import { projectsRouter } from './routes/projects.js';
 import { rcasRouter } from './routes/rcas.js';
+import { sectionsRouter } from './routes/sections.js';
 import { usersRouter } from './routes/users.js';
 
 export function createApp() {
@@ -31,6 +32,7 @@ export function createApp() {
   secured.use(companiesRouter);
   secured.use(projectsRouter);
   secured.use(rcasRouter);
+  secured.use(sectionsRouter);
   api.use(secured);
 
   api.use(() => {

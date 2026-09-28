@@ -87,3 +87,41 @@ export async function createRca(actor: Actor, projectId: string, teamLeaderId: s
   if (res.status !== 201) throw new Error(`createRca failed: ${res.status} ${JSON.stringify(res.body)}`);
   return res.body;
 }
+
+export const COMPLETE_SECTION = {
+  cause_category: 'CODE_DEFECT',
+  escape_analysis: 'No test for null currency.',
+  extra_1: 'Unit test gap',
+  extra_2: 'PR-123',
+  whys: [
+    { why_no: 1, answer: 'API threw NPE' },
+    { why_no: 5, answer: 'Currency default missing in config loader' },
+  ],
+};
+
+/** Fill a team section with valid data, add one action, and submit it. */
+export async function fillAndSubmitSection(
+  actor: Actor,
+  rcaId: string,
+  team: 'DEV' | 'QA' | 'PROD',
+  opts: { actionStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'; ownerId?: string } = {},
+) {
+  const base = `/api/v1/rcas/${rcaId}/sections/${team}`;
+  const current = await api().get(base).set(bearer(actor));
+  const saved = await api().put(base).set(bearer(actor)).send({ version: current.body.version, ...COMPLETE_SECTION });
+  if (saved.status !== 200) throw new Error(`save ${team} failed: ${saved.status} ${JSON.stringify(saved.body)}`);
+  const action = await api()
+    .post(`${base}/actions`)
+    .set(bearer(actor))
+    .send({
+      action: `Fix for ${team}`,
+      owner_id: opts.ownerId ?? actor.id,
+      due_date: '2026-10-15',
+      status: opts.actionStatus ?? 'COMPLETED',
+      completed_on: opts.actionStatus && opts.actionStatus !== 'COMPLETED' ? null : '2026-09-30',
+    });
+  if (action.status !== 201) throw new Error(`action ${team} failed: ${action.status} ${JSON.stringify(action.body)}`);
+  const submitted = await api().post(`${base}/submit`).set(bearer(actor)).send({});
+  if (submitted.status !== 200) throw new Error(`submit ${team} failed: ${submitted.status} ${JSON.stringify(submitted.body)}`);
+  return { section: submitted.body, action: action.body };
+}
