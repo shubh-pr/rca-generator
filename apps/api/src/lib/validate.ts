@@ -8,7 +8,13 @@ export function parse<T extends z.ZodType>(schema: T, data: unknown): z.infer<T>
     const fields: FieldErrors = {};
     for (const issue of result.error.issues) {
       const key = issue.path.length ? issue.path.join('.') : '_';
-      fields[key] ??= issue.message;
+      const missing = issue.code === 'invalid_type' && (issue.input === undefined || issue.input === null);
+      const unknownKey = issue.code === 'unrecognized_keys';
+      if (unknownKey) {
+        for (const k of issue.keys) fields[k] ??= 'Unknown or read-only field';
+        continue;
+      }
+      fields[key] ??= missing ? 'Required' : issue.message;
     }
     throw badRequest(fields);
   }

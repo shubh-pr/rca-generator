@@ -66,3 +66,24 @@ export async function createProject(ownerId: string, name = 'Payment Gateway') {
 }
 
 export const bearer = (a: Actor) => ({ Authorization: `Bearer ${a.token}` });
+
+export function rcaBody(projectId: string, teamLeaderId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    rca_date: '2026-09-28',
+    project_id: projectId,
+    team_leader_id: teamLeaderId,
+    ticket_id: 'INC-10452',
+    severity: 'P2',
+    environment: 'PROD',
+    incident_start: '2026-09-27T14:05:00+05:30',
+    summary: 'Payment API returned 500 for 40 minutes.',
+    ...overrides,
+  };
+}
+
+/** Create an RCA through the API as the given actor; returns the response body. */
+export async function createRca(actor: Actor, projectId: string, teamLeaderId: string, overrides: Record<string, unknown> = {}) {
+  const res = await api().post('/api/v1/rcas').set(bearer(actor)).send(rcaBody(projectId, teamLeaderId, overrides));
+  if (res.status !== 201) throw new Error(`createRca failed: ${res.status} ${JSON.stringify(res.body)}`);
+  return res.body;
+}

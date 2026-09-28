@@ -7,6 +7,7 @@ import { errorHandler } from './lib/errorHandler.js';
 import { jsonReplacer } from './lib/json.js';
 import { companiesRouter } from './routes/companies.js';
 import { projectsRouter } from './routes/projects.js';
+import { rcasRouter } from './routes/rcas.js';
 import { usersRouter } from './routes/users.js';
 
 export function createApp() {
@@ -29,6 +30,7 @@ export function createApp() {
   secured.use(usersRouter);
   secured.use(companiesRouter);
   secured.use(projectsRouter);
+  secured.use(rcasRouter);
   api.use(secured);
 
   api.use(() => {

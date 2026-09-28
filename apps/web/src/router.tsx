@@ -8,6 +8,9 @@ import { ProjectsPage } from './pages/admin/ProjectsPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { HomePage } from './pages/HomePage';
 import { LoginPage } from './pages/LoginPage';
+import { RcaEditPage } from './pages/rca/RcaEditPage';
+import { RcaListPage } from './pages/rca/RcaListPage';
+import { RcaNewPage } from './pages/rca/RcaNewPage';
 
 function RequireAuth() {
   const { user, loading } = useAuth();
@@ -37,6 +40,10 @@ export const router = createBrowserRouter([
           { index: true, element: <Home /> },
           { path: 'dashboard', element: <HomePage /> },
           { path: 'my-tasks', element: <HomePage /> },
+          { path: 'rcas', element: <RcaListPage /> },
+          { path: 'rcas/new', element: <RcaNewPage /> },
+          { path: 'rcas/:id', element: <RcaEditPage /> },
+          { path: 'rcas/:id/edit', element: <RcaEditPage /> },
           { path: 'admin/users', element: <AdminOnly><UsersPage /></AdminOnly> },
           { path: 'admin/projects', element: <AdminOnly><ProjectsPage /></AdminOnly> },
           { path: 'admin/companies', element: <AdminOnly><CompaniesPage /></AdminOnly> },
