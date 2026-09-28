@@ -125,3 +125,36 @@ export async function fillAndSubmitSection(
   if (submitted.status !== 200) throw new Error(`submit ${team} failed: ${submitted.status} ${JSON.stringify(submitted.body)}`);
   return { section: submitted.body, action: action.body };
 }
+
+export const COMMON_COMPLETE = {
+  detected_at: '2026-09-27T14:20:00+05:30',
+  resolved_at: '2026-09-27T14:45:00+05:30',
+  impact_users: 'All card customers',
+  detection_method: 'MONITORING',
+  immediate_fix: 'Rolled back release 4.2.1',
+};
+
+/** Complete header/common and submit all three sections with their own team users. */
+export async function prepareForReview(a: Record<RoleKey, Actor>, rcaId: string, actionStatus: 'COMPLETED' | 'IN_PROGRESS' = 'COMPLETED') {
+  const patch = await api().patch(`/api/v1/rcas/${rcaId}`).set(bearer(a.RCA_LEAD)).send(COMMON_COMPLETE);
+  if (patch.status !== 200) throw new Error(`patch failed ${JSON.stringify(patch.body)}`);
+  const actions: Record<string, { id: string }> = {};
+  for (const team of ['DEV', 'QA', 'PROD'] as const) {
+    actions[team] = (await fillAndSubmitSection(a[team], rcaId, team, { actionStatus })).action;
+  }
+  return actions;
+}
+
+export async function signAll(a: Record<RoleKey, Actor>, rcaId: string) {
+  const order: [RoleKey, string][] = [
+    ['DEV', 'DEV_LEAD'],
+    ['QA', 'QA_LEAD'],
+    ['PROD', 'PROD_LEAD'],
+    ['PROJECT_OWNER', 'PROJECT_OWNER'],
+    ['RCA_LEAD', 'RCA_LEAD'],
+  ];
+  for (const [actor, role] of order) {
+    const res = await api().post(`/api/v1/rcas/${rcaId}/signoffs/${role}`).set(bearer(a[actor])).send({});
+    if (res.status !== 200) throw new Error(`sign ${role} failed ${res.status} ${JSON.stringify(res.body)}`);
+  }
+}

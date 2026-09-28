@@ -9,6 +9,10 @@ import { companiesRouter } from './routes/companies.js';
 import { projectsRouter } from './routes/projects.js';
 import { rcasRouter } from './routes/rcas.js';
 import { sectionsRouter } from './routes/sections.js';
+import { attachmentsRouter } from './routes/attachments.js';
+import { auditRouter } from './routes/audit.js';
+import { followupsRouter } from './routes/followups.js';
+import { workflowRouter } from './routes/workflow.js';
 import { usersRouter } from './routes/users.js';
 
 export function createApp() {
@@ -33,6 +37,10 @@ export function createApp() {
   secured.use(projectsRouter);
   secured.use(rcasRouter);
   secured.use(sectionsRouter);
+  secured.use(workflowRouter);
+  secured.use(followupsRouter);
+  secured.use(attachmentsRouter);
+  secured.use(auditRouter);
   api.use(secured);
 
   api.use(() => {

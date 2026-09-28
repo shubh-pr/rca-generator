@@ -1,6 +1,8 @@
 import { Link } from 'react-router';
 import type { Rca } from '../../api/types';
 import { SeverityChip, StatusChip } from '../../components/Chips';
+import { ExportButtons } from './ExportButtons';
+import { WorkflowButtons } from './WorkflowButtons';
 
 export function RcaTitleBar({ rca, mode }: { rca: Rca; mode: 'edit' | 'view' }) {
   return (
@@ -17,7 +19,9 @@ export function RcaTitleBar({ rca, mode }: { rca: Rca; mode: 'edit' | 'view' }) 
           {rca.project.company.name} · {rca.project.name} · Project Owner: {rca.project.owner.name}
         </p>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex max-w-xl flex-wrap justify-end gap-2">
+        <WorkflowButtons rca={rca} />
+        <ExportButtons rca={rca} />
         {mode === 'edit' ? (
           <Link to={`/rcas/${rca.id}`} className="btn-secondary">
             Read-only view

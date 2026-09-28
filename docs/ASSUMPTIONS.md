@@ -43,3 +43,16 @@ Where the spec (`docs/SPEC.md`) was silent or ambiguous I took the simplest reas
 - **Whys 2–4 are optional** at submit, per "all 5 Whys (or at least Why 1 and Why 5)".
 - **Action status COMPLETED** does not require `completed_on`. The spec requires dates only for the section's completion status.
 - **Auto-save:** the team tab saves a draft every 60 seconds while it has unsaved edits. After a 409 it stops auto-saving until the user reloads.
+
+## Workflow, sign-off, follow-ups, attachments, audit
+
+- **"Header and common sections complete" before review** means summary, detected_at, resolved_at, impact_users, detection_method and immediate_fix are filled. The optional descriptive fields (impact duration, revenue, applied by) are not required.
+- **Sign-off timing:** sign-off is possible only while the RCA is IN_REVIEW (409 otherwise). Following "all three team lead sign-offs are done … Then Project Owner and RCA Team Leader sign off", the PROJECT_OWNER and RCA_LEAD sign-offs return 422 until DEV_LEAD, QA_LEAD and PROD_LEAD have signed.
+- **Who signs which role:** a DEV user signs DEV_LEAD, QA signs QA_LEAD, PROD signs PROD_LEAD, and Project Owner and RCA Team Leader sign their own roles. Matching is by role, so any user holding the role may sign. Admin may sign any role, as the matrix gives Admin "Y", and the record shows the admin's name.
+- **Send back:** the body is `{ comment, teams: [...] }`. Only the named sections return to IN_PROGRESS. All sign-offs are cleared, because the content will change. The comment is stored in the SEND_BACK audit row.
+- **Reopen:** CLOSED goes to DRAFT, `version + 1`, `closed_at` is cleared, and sign-offs are cleared. Sections stay SUBMITTED; the Lead or Admin can unlock the ones that need changes.
+- **Moving an action to follow-ups:** `rca_followup` has an extra nullable `action_id`. POST `/followups` with `action_id` requires an owner and a due date, and marks that action as moved. The close rule treats an action as done when it is COMPLETED, or when it has a follow-up with an owner and a due date.
+- **Follow-up edit and delete:** the spec lists only GET/POST for follow-ups. PATCH/DELETE `/rcas/{id}/followups/{fid}` (Lead+) were added because the Closing tab's follow-ups table needs inline editing (SPEC 6.2).
+- **Attachments:** `.jpeg` is accepted as the same type as `.jpg`. The served Content-Type comes from the file extension, never from the client. Downloads are always `Content-Disposition: attachment` with `nosniff`. Files are stored under `UPLOAD_DIR` with a random UUID name, and the database stores only that name. A GET list endpoint `/rcas/{id}/attachments` was added next to the spec's POST.
+- **Global audit endpoint:** the Audit log screen (Owner and Admin, filters by RCA, user and date) needs a cross-RCA query, so `GET /api/v1/audit` was added. It also accepts `action`, `entity` and `rca_number` filters.
+- **Seed samples** are written directly with Prisma: RCA-2026-0001 is CLOSED and satisfies every close rule, and RCA-2026-0002 is DRAFT with Dev submitted, QA in progress and Production not started. They are skipped when any RCA already exists.
