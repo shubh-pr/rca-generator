@@ -11,6 +11,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
 import { RcaListPage } from './pages/rca/RcaListPage';
 import { RcaNewPage } from './pages/rca/RcaNewPage';
+import { RcaPrintPage } from './pages/rca/RcaPrintPage';
 import { RcaViewPage } from './pages/rca/RcaViewPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
+      { path: 'rcas/:id/print', element: <RcaPrintPage /> },
       {
         element: <Layout />,
         children: [
