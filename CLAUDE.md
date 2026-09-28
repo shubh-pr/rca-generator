@@ -1,0 +1,76 @@
+# RCA Admin Dashboard
+
+Web dashboard for Root Cause Analysis (RCA) records. Dev, QA and Production teams each fill
+their own section of an RCA, and any RCA can be printed or exported as PDF/DOCX.
+
+- **Source of truth:** `docs/SPEC.md` (generated from `docs/RCA_Admin_Dashboard_Design_Spec.docx`).
+- **Decisions and ambiguities:** `docs/ASSUMPTIONS.md`. Add an entry for every judgement call.
+- **Phase plans:** `docs/PLAN.md`.
+
+## Stack
+
+| Layer    | Tech |
+|----------|------|
+| Database | PostgreSQL 16, Prisma 6 (migrations + seed) |
+| API      | Node.js 22, TypeScript, Express 5, zod, JWT (jsonwebtoken), bcryptjs, multer |
+| Web      | React 19, TypeScript, Vite 8, Tailwind CSS 4, React Router 8 (data router), TanStack Query 5 |
+| Export   | Playwright Chromium (PDF from the `/print` HTML), `docx` (Word), `exceljs` (xlsx) |
+| Tests    | Vitest + supertest (API), Vitest (web unit), Playwright (end-to-end) |
+| Run      | `docker-compose.yml`: `db` (postgres), `api`, `web` (nginx serving the build, proxying `/api`) |
+
+## Folder structure
+
+```
+apps/api/                 Express API (npm workspace "@rca/api")
+  prisma/schema.prisma    Data model (tables and columns are snake_case, as in the spec)
+  prisma/migrations/      SQL migrations (incl. CHECK constraints and the audit_log no-update trigger)
+  prisma/seed.ts          Idempotent seed (users per role, company, project, 2 RCAs)
+  src/app.ts              Express app factory (used by server.ts and tests)
+  src/server.ts           HTTP entry point
+  src/auth/               ALL auth code: passwords, JWT, middleware, /auth routes (swap for SSO here)
+  src/lib/                errors, validation helpers, permissions, audit, pagination, dates
+  src/routes/             One router per resource (rcas, sections, workflow, masters, ...)
+  src/services/           Business logic (RCA number, workflow rules, queries)
+  src/export/             print HTML, PDF, DOCX, CSV/XLSX
+  test/                   Vitest API tests (supertest), run against the rca_test database
+apps/web/                 React app (npm workspace "@rca/web")
+  src/api/                fetch client + TanStack Query hooks
+  src/components/         Shared UI (chips, badges, layout, form fields)
+  src/pages/              One file per screen
+  src/lib/                Labels, date helpers (IST display), permissions mirror
+  e2e/                    Playwright end-to-end tests
+docs/                     Spec, assumptions, plan
+```
+
+## Naming conventions
+
+- DB tables/columns and API JSON fields: `snake_case`, exactly as in the spec (`rca_number`, `team_leader_id`).
+  Prisma models are PascalCase with `@@map` to the spec table names; Prisma fields are snake_case so API
+  payloads need no mapping.
+- Enum values: UPPER_SNAKE (`IN_REVIEW`, `CODE_DEFECT`).
+- TypeScript variables/functions: `camelCase`; types/components: `PascalCase`; files: `camelCase.ts`,
+  React components/pages `PascalCase.tsx`.
+- Routes live under `/api/v1`. Errors are `{ error: CODE, message, fields? }` with codes
+  `VALIDATION` (400), `UNAUTHORIZED` (401), `FORBIDDEN` (403), `NOT_FOUND` (404),
+  `CONFLICT`/`VERSION_CONFLICT` (409), `BUSINESS_RULE` (422).
+- Date-only columns are sent as `YYYY-MM-DD`; timestamps as ISO 8601 UTC. The UI displays IST (Asia/Kolkata).
+- Every permission check happens on the server (`src/lib/permissions.ts`); the web mirror only greys out fields.
+- Every create/update/submit/sign/close/reopen/export writes `audit_log` via `src/lib/audit.ts`, in the same transaction.
+
+## Commands (run from the repo root)
+
+```bash
+npm install                          # install all workspaces
+npx playwright install chromium      # browser for PDF export + e2e (once)
+cp apps/api/.env.example apps/api/.env
+docker compose up -d db              # start postgres only (localhost:5433)
+npm run db:migrate                   # prisma migrate deploy (dev DB)
+npm run db:seed                      # seed users/company/project/sample RCAs (idempotent)
+npm run dev                          # api on :4000, web on :5173 (proxies /api)
+npm run lint                         # eslint + tsc --noEmit for both apps
+npm test                             # API tests (resets rca_test DB) + web unit tests
+npm run test:e2e                     # Playwright full flow (starts api + web itself)
+docker compose up --build            # whole stack: http://localhost:8080
+```
+
+New migration during development: `npm run db:migrate:dev -- --name <name>` (runs `prisma migrate dev`).

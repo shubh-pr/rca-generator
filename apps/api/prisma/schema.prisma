@@ -1,0 +1,414 @@
+// RCA Admin Dashboard data model. Mirrors Section 4 of docs/SPEC.md.
+// Table and column names are the spec's snake_case names.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- 4.1 Enumerations ----------
+
+enum Severity {
+  P1
+  P2
+  P3
+  P4
+
+  @@map("severity")
+}
+
+enum Environment {
+  PROD
+  UAT
+  STAGING
+
+  @@map("environment")
+}
+
+enum RcaStatus {
+  DRAFT
+  IN_REVIEW
+  CLOSED
+
+  @@map("rca_status")
+}
+
+enum Team {
+  DEV
+  QA
+  PROD
+
+  @@map("team")
+}
+
+enum SectionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+
+  @@map("section_status")
+}
+
+enum CauseCategory {
+  CODE_DEFECT
+  CONFIG
+  REQUIREMENT_GAP
+  TEST_GAP
+  DEPLOYMENT
+  INFRA
+  THIRD_PARTY
+  DATA
+
+  @@map("cause_category")
+}
+
+enum ActionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("action_status")
+}
+
+enum CompletionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+
+  @@map("completion_status")
+}
+
+enum DetectionMethod {
+  MONITORING
+  CLIENT_REPORT
+  QA
+  OTHER
+
+  @@map("detection_method")
+}
+
+enum UserRole {
+  ADMIN
+  PROJECT_OWNER
+  RCA_LEAD
+  DEV
+  QA
+  PROD
+  VIEWER
+
+  @@map("user_role")
+}
+
+enum SignoffRole {
+  PROJECT_OWNER
+  RCA_LEAD
+  DEV_LEAD
+  QA_LEAD
+  PROD_LEAD
+
+  @@map("signoff_role")
+}
+
+// ---------- 4.3 users, companies, projects ----------
+
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String   @db.VarChar(120)
+  email         String   @unique @db.VarChar(180)
+  password_hash String   @db.VarChar(100)
+  role          UserRole
+  team          Team?
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(3)
+  updated_at    DateTime @updatedAt @db.Timestamptz(3)
+
+  owned_projects      Project[]        @relation("ProjectOwner")
+  led_rcas            Rca[]            @relation("RcaTeamLeader")
+  prepared_rcas       Rca[]            @relation("RcaPreparedBy")
+  reviewed_rcas       Rca[]            @relation("RcaReviewedBy")
+  created_rcas        Rca[]            @relation("RcaCreatedBy")
+  updated_rcas        Rca[]            @relation("RcaUpdatedBy")
+  contributed_sections RcaTeamSection[] @relation("SectionContributor")
+  verified_sections   RcaTeamSection[] @relation("SectionVerifiedBy")
+  updated_sections    RcaTeamSection[] @relation("SectionUpdatedBy")
+  owned_actions       RcaAction[]      @relation("ActionOwner")
+  created_actions     RcaAction[]      @relation("ActionCreatedBy")
+  owned_followups     RcaFollowup[]    @relation("FollowupOwner")
+  created_followups   RcaFollowup[]    @relation("FollowupCreatedBy")
+  created_timeline    RcaTimeline[]    @relation("TimelineCreatedBy")
+  uploads             RcaAttachment[]
+  signoffs            RcaSignoff[]
+  audit_entries       AuditLog[]
+
+  @@map("users")
+}
+
+model Company {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @unique @db.VarChar(150)
+  created_at DateTime @default(now()) @db.Timestamptz(3)
+  updated_at DateTime @updatedAt @db.Timestamptz(3)
+
+  projects Project[]
+
+  @@map("companies")
+}
+
+model Project {
+  id            String   @id @default(uuid()) @db.Uuid
+  company_id    String   @db.Uuid
+  name          String   @db.VarChar(150)
+  owner_user_id String   @db.Uuid
+  created_at    DateTime @default(now()) @db.Timestamptz(3)
+  updated_at    DateTime @updatedAt @db.Timestamptz(3)
+
+  company Company @relation(fields: [company_id], references: [id])
+  owner   User    @relation("ProjectOwner", fields: [owner_user_id], references: [id])
+  rcas    Rca[]
+
+  @@unique([company_id, name])
+  @@map("projects")
+}
+
+// ---------- 4.4 rca ----------
+
+model Rca {
+  id                  String           @id @default(uuid()) @db.Uuid
+  rca_number          String           @unique @db.VarChar(20)
+  rca_date            DateTime         @db.Date
+  project_id          String           @db.Uuid
+  team_leader_id      String           @db.Uuid
+  ticket_id           String?          @db.VarChar(60)
+  severity            Severity
+  environment         Environment
+  status              RcaStatus        @default(DRAFT)
+  version             Int              @default(1)
+  incident_start      DateTime         @db.Timestamptz(3)
+  detected_at         DateTime?        @db.Timestamptz(3)
+  resolved_at         DateTime?        @db.Timestamptz(3)
+  prepared_by         String?          @db.Uuid
+  reviewed_by         String?          @db.Uuid
+  summary             String
+  impact_users        String?
+  impact_duration     String?          @db.VarChar(80)
+  impact_data_revenue String?
+  sla_breached        Boolean          @default(false)
+  detection_method    DetectionMethod?
+  immediate_fix       String?
+  immediate_fix_by    String?          @db.VarChar(120)
+  lessons_well        String?
+  lessons_not_well    String?
+  lessons_key         String?
+  is_deleted          Boolean          @default(false)
+  closed_at           DateTime?        @db.Timestamptz(3)
+  created_at          DateTime         @default(now()) @db.Timestamptz(3)
+  updated_at          DateTime         @updatedAt @db.Timestamptz(3)
+  created_by          String?          @db.Uuid
+  updated_by          String?          @db.Uuid
+
+  project          Project          @relation(fields: [project_id], references: [id])
+  team_leader      User             @relation("RcaTeamLeader", fields: [team_leader_id], references: [id])
+  prepared_by_user User?            @relation("RcaPreparedBy", fields: [prepared_by], references: [id])
+  reviewed_by_user User?            @relation("RcaReviewedBy", fields: [reviewed_by], references: [id])
+  created_by_user  User?            @relation("RcaCreatedBy", fields: [created_by], references: [id])
+  updated_by_user  User?            @relation("RcaUpdatedBy", fields: [updated_by], references: [id])
+  timeline         RcaTimeline[]
+  sections         RcaTeamSection[]
+  followups        RcaFollowup[]
+  attachments      RcaAttachment[]
+  signoffs         RcaSignoff[]
+  audit_entries    AuditLog[]
+
+  @@index([status])
+  @@index([project_id])
+  @@index([rca_date])
+  @@index([severity])
+  @@map("rca")
+}
+
+// Yearly counter for RCA-YYYY-NNNN, incremented inside the RCA insert transaction.
+model RcaNumberSeq {
+  year       Int @id
+  last_value Int
+
+  @@map("rca_number_seq")
+}
+
+// ---------- 4.5 rca_timeline ----------
+
+model RcaTimeline {
+  id             String   @id @default(uuid()) @db.Uuid
+  rca_id         String   @db.Uuid
+  event_time     DateTime @db.Timestamptz(3)
+  event          String
+  team_or_person String?  @db.VarChar(120)
+  sort_order     Int?
+  created_at     DateTime @default(now()) @db.Timestamptz(3)
+  updated_at     DateTime @updatedAt @db.Timestamptz(3)
+  created_by     String?  @db.Uuid
+
+  rca             Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  created_by_user User? @relation("TimelineCreatedBy", fields: [created_by], references: [id])
+
+  @@index([rca_id])
+  @@map("rca_timeline")
+}
+
+// ---------- 4.6 rca_team_section ----------
+
+model RcaTeamSection {
+  id                String           @id @default(uuid()) @db.Uuid
+  rca_id            String           @db.Uuid
+  team              Team
+  contributor_id    String?          @db.Uuid
+  cause_category    CauseCategory?
+  escape_analysis   String?
+  extra_1           String?
+  extra_2           String?
+  prev_process      String?
+  prev_automation   String?
+  prev_owner_date   String?          @db.VarChar(160)
+  target_date       DateTime?        @db.Date
+  actual_date       DateTime?        @db.Date
+  completion_status CompletionStatus @default(NOT_STARTED)
+  verified_by       String?          @db.Uuid
+  section_status    SectionStatus    @default(NOT_STARTED)
+  submitted_at      DateTime?        @db.Timestamptz(3)
+  version           Int              @default(1)
+  created_at        DateTime         @default(now()) @db.Timestamptz(3)
+  updated_at        DateTime         @updatedAt @db.Timestamptz(3)
+  updated_by        String?          @db.Uuid
+
+  rca              Rca         @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  contributor      User?       @relation("SectionContributor", fields: [contributor_id], references: [id])
+  verified_by_user User?       @relation("SectionVerifiedBy", fields: [verified_by], references: [id])
+  updated_by_user  User?       @relation("SectionUpdatedBy", fields: [updated_by], references: [id])
+  whys             RcaWhy[]
+  actions          RcaAction[]
+
+  @@unique([rca_id, team])
+  @@map("rca_team_section")
+}
+
+// ---------- 4.7 rca_why, rca_action, rca_followup ----------
+
+model RcaWhy {
+  id         String  @id @default(uuid()) @db.Uuid
+  section_id String  @db.Uuid
+  why_no     Int     @db.SmallInt
+  answer     String?
+
+  section RcaTeamSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
+
+  @@unique([section_id, why_no])
+  @@map("rca_why")
+}
+
+model RcaAction {
+  id           String       @id @default(uuid()) @db.Uuid
+  section_id   String       @db.Uuid
+  seq          Int?
+  action       String
+  owner_id     String       @db.Uuid
+  due_date     DateTime     @db.Date
+  status       ActionStatus @default(NOT_STARTED)
+  completed_on DateTime?    @db.Date
+  created_at   DateTime     @default(now()) @db.Timestamptz(3)
+  updated_at   DateTime     @updatedAt @db.Timestamptz(3)
+  created_by   String?      @db.Uuid
+
+  section         RcaTeamSection @relation(fields: [section_id], references: [id], onDelete: Cascade)
+  owner           User           @relation("ActionOwner", fields: [owner_id], references: [id])
+  created_by_user User?          @relation("ActionCreatedBy", fields: [created_by], references: [id])
+  followup        RcaFollowup?
+
+  @@index([owner_id, status, due_date])
+  @@index([section_id])
+  @@map("rca_action")
+}
+
+model RcaFollowup {
+  id         String    @id @default(uuid()) @db.Uuid
+  rca_id     String    @db.Uuid
+  risk       String
+  owner_id   String?   @db.Uuid
+  due_date   DateTime? @db.Date
+  // Set when an open action was moved to follow-ups (see docs/ASSUMPTIONS.md).
+  action_id  String?   @unique @db.Uuid
+  created_at DateTime  @default(now()) @db.Timestamptz(3)
+  updated_at DateTime  @updatedAt @db.Timestamptz(3)
+  created_by String?   @db.Uuid
+
+  rca             Rca        @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  owner           User?      @relation("FollowupOwner", fields: [owner_id], references: [id])
+  created_by_user User?      @relation("FollowupCreatedBy", fields: [created_by], references: [id])
+  action          RcaAction? @relation(fields: [action_id], references: [id], onDelete: SetNull)
+
+  @@index([rca_id])
+  @@map("rca_followup")
+}
+
+// ---------- 4.8 rca_attachment, rca_signoff, audit_log ----------
+
+model RcaAttachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  rca_id      String   @db.Uuid
+  description String?  @db.VarChar(255)
+  kind        String   @db.VarChar(10)
+  file_path   String?
+  url         String?
+  file_name   String?  @db.VarChar(255)
+  mime        String?  @db.VarChar(120)
+  size        Int?
+  uploaded_by String?  @db.Uuid
+  created_at  DateTime @default(now()) @db.Timestamptz(3)
+  updated_at  DateTime @updatedAt @db.Timestamptz(3)
+
+  rca      Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  uploader User? @relation(fields: [uploaded_by], references: [id])
+
+  @@index([rca_id])
+  @@map("rca_attachment")
+}
+
+model RcaSignoff {
+  id         String      @id @default(uuid()) @db.Uuid
+  rca_id     String      @db.Uuid
+  role       SignoffRole
+  user_id    String?     @db.Uuid
+  signed_at  DateTime?   @db.Timestamptz(3)
+  comment    String?
+  created_at DateTime    @default(now()) @db.Timestamptz(3)
+  updated_at DateTime    @updatedAt @db.Timestamptz(3)
+
+  rca  Rca   @relation(fields: [rca_id], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [user_id], references: [id])
+
+  @@unique([rca_id, role])
+  @@map("rca_signoff")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  entity    String   @db.VarChar(40)
+  entity_id String   @db.Uuid
+  // Owning RCA, so the audit screen can filter child-entity events by RCA.
+  rca_id    String?  @db.Uuid
+  action    String   @db.VarChar(20)
+  old_value Json?
+  new_value Json?
+  user_id   String?  @db.Uuid
+  at        DateTime @default(now()) @db.Timestamptz(3)
+
+  rca  Rca?  @relation(fields: [rca_id], references: [id])
+  user User? @relation(fields: [user_id], references: [id])
+
+  @@index([rca_id, at])
+  @@index([user_id, at])
+  @@index([at])
+  @@map("audit_log")
+}

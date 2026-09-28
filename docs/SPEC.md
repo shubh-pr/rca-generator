@@ -1,0 +1,616 @@
+**RCA Admin Dashboard**
+
+Technical Design Specification: Database, API and UI
+
+Project Owner: Jogender Kota \| Version 1.0 \| Status: Draft for review
+
+| **Item** | **Detail** |
+|----|----|
+| **Purpose** | Convert the approved RCA Word template into a web admin dashboard where Dev, QA and Production teams each fill their own section, and any RCA can be printed or downloaded. |
+| **Source template** | RCA_Template.docx (Header, Common sections, Dev / QA / Production sections, Closing sections, Sign-off) |
+| **Scope** | Database schema, REST API, UI screens, workflow and permissions, print / PDF / DOCX export, acceptance criteria |
+| **Stack** | Stack-neutral. Suggested default: PostgreSQL, REST API (Node.js or Python), React UI, headless Chromium for PDF. Adjust to your team's stack. |
+
+**1. Goals and Scope**
+
+------------------------------------------------------------------------
+
+**1.1 Goals**
+
+- Every RCA is stored as structured data, not as a loose Word file.
+
+- Each team (Dev, QA, Production) edits only its own section, without
+  overwriting the others.
+
+- One RCA record can be printed or downloaded (PDF and Word) in the same
+  layout as the approved template.
+
+- Actions, due dates and sign-offs are tracked and visible on a
+  dashboard (overdue items, open RCAs, and so on).
+
+- Every change is auditable (who changed what, and when).
+
+**1.2 In scope (v1)**
+
+- RCA create, edit, review, close and reopen
+
+- Team-wise sections with 5 Whys, actions, prevention and completion
+  tracking
+
+- Timeline, attachments, follow-ups and sign-offs
+
+- Role-based access, audit log, dashboard, search and filters
+
+- Print view, PDF export, DOCX export, list export (CSV / Excel), blank
+  template download
+
+**1.3 Out of scope (v1)**
+
+- Email or Slack notifications (planned for v2)
+
+- Integration with Jira or ServiceNow (only a ticket ID field in v1)
+
+- Multi-language support
+
+**2. Roles and Permissions**
+
+------------------------------------------------------------------------
+
+Roles are assigned per user. Dev, QA and Production are also the "team"
+of the user, which decides which section they can edit.
+
+| **Permission** | **Admin** | **Owner** | **Lead** | **Dev** | **QA** | **Prod** | **View** |
+|----|----|----|----|----|----|----|----|
+| **Create RCA** | Y | Y | Y | \- | \- | \- | \- |
+| **Edit header and common sections** | Y | Y | Y | \- | \- | \- | \- |
+| **Edit Dev section** | Y | \- | Y | Y | \- | \- | \- |
+| **Edit QA section** | Y | \- | Y | \- | Y | \- | \- |
+| **Edit Production section** | Y | \- | Y | \- | \- | Y | \- |
+| **Submit own team section** | Y | \- | Y | Y | Y | Y | \- |
+| **Submit RCA for review** | Y | Y | Y | \- | \- | \- | \- |
+| **Sign off (own role only)** | Y | Y | Y | Y | Y | Y | \- |
+| **Close / reopen RCA** | Y | Y | \- | \- | \- | \- | \- |
+| **Delete RCA (soft delete)** | Y | \- | \- | \- | \- | \- | \- |
+| **Manage users, projects, companies** | Y | \- | \- | \- | \- | \- | \- |
+| **View, print, download** | Y | Y | Y | Y | Y | Y | Y |
+
+Owner = Project Owner, Lead = RCA Team Leader, View = read-only. Team
+members can edit only while their section is not yet submitted. The RCA
+Team Leader and Admin can reopen a submitted section.
+
+**3. Workflow and Business Rules**
+
+------------------------------------------------------------------------
+
+**3.1 RCA status flow**
+
+> DRAFT --\> IN_REVIEW --\> CLOSED
+>
+> ^ \| \|
+>
+> +---- (send back) (Admin reopen, version + 1)
+
+| **Transition** | **Allowed when** |
+|----|----|
+| **DRAFT to IN_REVIEW** | Header and common sections complete. Dev, QA and Production sections are all SUBMITTED. Each team has at least one action and a root cause (Why 5). |
+| **IN_REVIEW to DRAFT** | Reviewer sends back with a comment. Only the team sections named in the comment are unlocked. |
+| **IN_REVIEW to CLOSED** | All three team lead sign-offs are done. Every action is COMPLETED, or moved to Follow-ups with an owner and date. Then Project Owner and RCA Team Leader sign off. |
+| **CLOSED to DRAFT (reopen)** | Admin or Project Owner only. A reason is mandatory. Version number increases by 1. |
+
+**3.2 Team section status**
+
+Each team section has its own status: NOT_STARTED, IN_PROGRESS,
+SUBMITTED. Saving as draft moves it to IN_PROGRESS. Submit locks it for
+that team. A submitted section can be reopened by the RCA Team Leader or
+Admin.
+
+**3.3 Validation rules**
+
+- Incident start \<= Detected at \<= Resolved at.
+
+- Time to detect is calculated by the system (Detected at minus Incident
+  start); it is not typed in.
+
+- Severity, Environment, Cause category and Status accept only the
+  defined values (see Section 4.1).
+
+- Submitting a team section requires: Cause category, all 5 Whys (or at
+  least Why 1 and Why 5), the escape analysis, and at least one action.
+
+- Every action needs an owner, a due date and a status. Due date cannot
+  be before the RCA date.
+
+- Completion status COMPLETED requires an actual date and Verified by.
+
+- RCA number is generated by the system in the format RCA-YYYY-NNNN (for
+  example RCA-2026-0001) and cannot be edited.
+
+- The header always shows the Project Owner from the project master
+  (Jogender Kota unless the project says otherwise).
+
+**3.4 Concurrent editing**
+
+Three teams will edit the same RCA at the same time. To avoid
+overwriting, each team section is saved separately (its own endpoint),
+and every save sends the last-seen version number. If the version has
+changed, the API returns 409 Conflict and the UI asks the user to
+reload.
+
+**4. Database Design**
+
+------------------------------------------------------------------------
+
+Relational schema (PostgreSQL syntax shown; MySQL works with minor
+changes). All tables have id (UUID or bigint), created_at, updated_at,
+and created_by / updated_by where relevant. Store timestamps in UTC and
+display them in IST (Asia/Kolkata).
+
+**4.1 Enumerations**
+
+| **Enum** | **Values** |
+|----|----|
+| severity | P1, P2, P3, P4 |
+| environment | PROD, UAT, STAGING |
+| rca_status | DRAFT, IN_REVIEW, CLOSED |
+| team | DEV, QA, PROD |
+| section_status | NOT_STARTED, IN_PROGRESS, SUBMITTED |
+| cause_category | CODE_DEFECT, CONFIG, REQUIREMENT_GAP, TEST_GAP, DEPLOYMENT, INFRA, THIRD_PARTY, DATA |
+| action_status | NOT_STARTED, IN_PROGRESS, COMPLETED |
+| completion_status | NOT_STARTED, IN_PROGRESS, COMPLETED |
+| detection_method | MONITORING, CLIENT_REPORT, QA, OTHER |
+| user_role | ADMIN, PROJECT_OWNER, RCA_LEAD, DEV, QA, PROD, VIEWER |
+| signoff_role | PROJECT_OWNER, RCA_LEAD, DEV_LEAD, QA_LEAD, PROD_LEAD |
+
+**4.2 Entity relationships**
+
+- companies 1 --- N projects
+
+- projects 1 --- N rca
+
+- rca 1 --- N rca_timeline
+
+- rca 1 --- 3 rca_team_section (exactly one per team: DEV, QA, PROD)
+
+- rca_team_section 1 --- 5 rca_why
+
+- rca_team_section 1 --- N rca_action
+
+- rca 1 --- N rca_followup, rca_attachment, rca_signoff, audit_log
+
+- users referenced by owner, contributor, action owner, sign-off and
+  audit columns
+
+**4.3 users, companies, projects**
+
+Master data managed by Admin.
+
+| **Column** | **Type** | **Constraints** | **Notes** |
+|----|----|----|----|
+| users.id | uuid | PK |  |
+| users.name | varchar(120) | NOT NULL |  |
+| users.email | varchar(180) | UNIQUE, NOT NULL | Login ID |
+| users.role | user_role | NOT NULL |  |
+| users.team | team | NULL | DEV, QA or PROD; drives section access |
+| users.is_active | boolean | DEFAULT true |  |
+| companies.id / name | uuid / varchar | PK / UNIQUE | Header: Company |
+| projects.id | uuid | PK |  |
+| projects.company_id | uuid | FK companies |  |
+| projects.name | varchar(150) | NOT NULL | Header: Project |
+| projects.owner_user_id | uuid | FK users | Header: Project Owner |
+
+**4.4 rca (header and common sections)**
+
+One row per RCA. Covers the header, Problem statement, Impact,
+Detection, Immediate fix and Lessons learned.
+
+| **Column** | **Type** | **Constraints** | **Notes** |
+|----|----|----|----|
+| id | uuid | PK |  |
+| rca_number | varchar(20) | UNIQUE, NOT NULL | RCA-2026-0001, system generated |
+| rca_date | date | NOT NULL | Header: DATE |
+| project_id | uuid | FK projects, NOT NULL | Company is derived from project |
+| team_leader_id | uuid | FK users, NOT NULL | RCA Team Leader |
+| ticket_id | varchar(60) |  | Linked incident / ticket ID |
+| severity | severity | NOT NULL |  |
+| environment | environment | NOT NULL |  |
+| status | rca_status | DEFAULT DRAFT |  |
+| version | int | DEFAULT 1 | Increases on reopen |
+| incident_start | timestamptz | NOT NULL |  |
+| detected_at | timestamptz |  |  |
+| resolved_at | timestamptz |  |  |
+| prepared_by / reviewed_by | uuid | FK users |  |
+| summary | text | NOT NULL | Problem statement, 2-3 lines |
+| impact_users | text |  | Users / clients affected |
+| impact_duration | varchar(80) |  |  |
+| impact_data_revenue | text |  |  |
+| sla_breached | boolean | DEFAULT false |  |
+| detection_method | detection_method |  |  |
+| immediate_fix | text |  | What stopped the impact |
+| immediate_fix_by | varchar(120) |  | Applied by / at |
+| lessons_well / lessons_not_well / lessons_key | text |  | Lessons learned |
+| is_deleted | boolean | DEFAULT false | Soft delete |
+| closed_at | timestamptz |  |  |
+
+**4.5 rca_timeline**
+
+Key events with timestamps.
+
+| **Column**     | **Type**     | **Constraints**           | **Notes**     |
+|----------------|--------------|---------------------------|---------------|
+| id             | uuid         | PK                        |               |
+| rca_id         | uuid         | FK rca, ON DELETE CASCADE |               |
+| event_time     | timestamptz  | NOT NULL                  |               |
+| event          | text         | NOT NULL                  |               |
+| team_or_person | varchar(120) |                           |               |
+| sort_order     | int          |                           | Display order |
+
+**4.6 rca_team_section**
+
+Exactly one row per team per RCA (UNIQUE rca_id + team). Holds the
+fields each team fills. Labels for extra_1 and extra_2 depend on the
+team (see the table below).
+
+| **Column** | **Type** | **Constraints** | **Notes** |
+|----|----|----|----|
+| id | uuid | PK |  |
+| rca_id | uuid | FK rca | UNIQUE with team |
+| team | team | NOT NULL | DEV / QA / PROD |
+| contributor_id | uuid | FK users | Team lead / RCA contributor |
+| cause_category | cause_category |  |  |
+| escape_analysis | text |  | Why it was not prevented / caught |
+| extra_1 | text |  | Team specific prompt 1 |
+| extra_2 | text |  | Team specific prompt 2 |
+| prev_process | text |  | Prevention: process / checklist |
+| prev_automation | text |  | Prevention: automation / tooling |
+| prev_owner_date | varchar(160) |  | Prevention: owner and target date |
+| target_date / actual_date | date |  | Completion |
+| completion_status | completion_status | DEFAULT NOT_STARTED |  |
+| verified_by | uuid | FK users |  |
+| section_status | section_status | DEFAULT NOT_STARTED |  |
+| submitted_at | timestamptz |  |  |
+| version | int | DEFAULT 1 | Optimistic locking |
+
+| **Team** | **escape_analysis label** | **extra_1 label** | **extra_2 label** |
+|----|----|----|----|
+| **DEV** | Why it was not prevented | Code review / unit test gap | Related PR / commit / release |
+| **QA** | Why it was not caught | Missing test case / regression gap | Test case IDs to add or update |
+| **PROD** | Why it was not prevented or detected early | Monitoring / alerting gap | Deployment / rollback gap |
+
+**4.7 rca_why, rca_action, rca_followup**
+
+5 Whys, action table and open risks.
+
+| **Column** | **Type** | **Constraints** | **Notes** |
+|----|----|----|----|
+| rca_why.section_id | uuid | FK rca_team_section |  |
+| rca_why.why_no | smallint | CHECK 1..5, UNIQUE with section | Why 5 = root cause |
+| rca_why.answer | text |  |  |
+| rca_action.section_id | uuid | FK rca_team_section | Actions belong to a team |
+| rca_action.seq | int |  | Row number (#) |
+| rca_action.action | text | NOT NULL |  |
+| rca_action.owner_id | uuid | FK users, NOT NULL |  |
+| rca_action.due_date | date | NOT NULL |  |
+| rca_action.status | action_status | DEFAULT NOT_STARTED |  |
+| rca_action.completed_on | date |  |  |
+| rca_followup.rca_id | uuid | FK rca |  |
+| rca_followup.risk | text | NOT NULL | Risk / follow-up |
+| rca_followup.owner_id / due_date | uuid / date | FK users |  |
+
+**4.8 rca_attachment, rca_signoff, audit_log**
+
+Files, sign-offs and change history.
+
+| **Column** | **Type** | **Constraints** | **Notes** |
+|----|----|----|----|
+| rca_attachment.rca_id | uuid | FK rca |  |
+| rca_attachment.description | varchar(255) |  |  |
+| rca_attachment.kind | varchar(10) | FILE or LINK |  |
+| rca_attachment.file_path / url | text |  | File stored on disk or object storage; only the path is in the DB |
+| rca_attachment.file_name / mime / size | varchar / varchar / int |  |  |
+| rca_attachment.uploaded_by | uuid | FK users |  |
+| rca_signoff.rca_id | uuid | FK rca | UNIQUE with role |
+| rca_signoff.role | signoff_role | NOT NULL |  |
+| rca_signoff.user_id | uuid | FK users |  |
+| rca_signoff.signed_at | timestamptz |  | NULL until signed |
+| rca_signoff.comment | text |  |  |
+| audit_log.entity / entity_id | varchar / uuid | NOT NULL | For example rca_team_section |
+| audit_log.action | varchar(20) |  | CREATE, UPDATE, SUBMIT, SIGN, CLOSE, REOPEN, EXPORT |
+| audit_log.old_value / new_value | jsonb |  |  |
+| audit_log.user_id / at | uuid / timestamptz |  |  |
+
+**4.9 Indexes and rules**
+
+- Indexes: rca(status), rca(project_id), rca(rca_date), rca(severity),
+  rca_action(owner_id, status, due_date).
+
+- On creating an RCA, the system also creates the 3 rca_team_section
+  rows and the 5 rca_signoff rows.
+
+- RCA number uses a yearly sequence, generated inside the insert
+  transaction to avoid duplicates.
+
+- Attachments are never stored as blobs in the database. Use a folder or
+  object store, and save only the path.
+
+**5. API Design**
+
+------------------------------------------------------------------------
+
+REST + JSON, base path /api/v1. Authentication: JWT bearer token (or
+your company SSO). All list endpoints support page, page_size and sort.
+Dates use ISO 8601.
+
+**5.1 Endpoints**
+
+| **Method** | **Path** | **Purpose** | **Roles** |
+|----|----|----|----|
+| **POST** | /auth/login | Login, returns token | All |
+| **GET** | /me | Current user, role, team | All |
+| **GET** | /rcas | List with filters: status, project_id, severity, environment, team, date_from, date_to, q | All |
+| **POST** | /rcas | Create RCA (also creates 3 sections and 5 sign-off rows) | Admin, Owner, Lead |
+| **GET** | /rcas/{id} | Full RCA with all sections | All |
+| **PATCH** | /rcas/{id} | Update header and common fields | Admin, Owner, Lead |
+| **DELETE** | /rcas/{id} | Soft delete | Admin |
+| **POST** | /rcas/{id}/submit-review | DRAFT to IN_REVIEW (runs validations) | Admin, Owner, Lead |
+| **POST** | /rcas/{id}/send-back | IN_REVIEW to DRAFT with comment | Admin, Owner, Lead |
+| **POST** | /rcas/{id}/close | IN_REVIEW to CLOSED | Admin, Owner |
+| **POST** | /rcas/{id}/reopen | CLOSED to DRAFT, reason required | Admin, Owner |
+| **GET/POST** | /rcas/{id}/timeline | List or add timeline event | Lead+ / own team |
+| **PATCH/DELETE** | /rcas/{id}/timeline/{tid} | Edit or remove event | Lead+ |
+| **GET** | /rcas/{id}/sections/{team} | Read one team section incl. whys and actions | All |
+| **PUT** | /rcas/{id}/sections/{team} | Save section (whys and fields), needs version | Team, Lead, Admin |
+| **POST** | /rcas/{id}/sections/{team}/submit | Submit and lock section | Team, Lead, Admin |
+| **POST** | /rcas/{id}/sections/{team}/reopen | Unlock submitted section | Lead, Admin |
+| **POST** | /rcas/{id}/sections/{team}/actions | Add action | Team, Lead, Admin |
+| **PATCH/DELETE** | /rcas/{id}/sections/{team}/actions/{aid} | Update or delete action | Team, Lead, Admin |
+| **GET/POST** | /rcas/{id}/followups | List or add follow-up | Lead+ |
+| **POST** | /rcas/{id}/attachments | Upload file (multipart) or add link | All except Viewer |
+| **GET** | /rcas/{id}/attachments/{aid}/download | Download file | All |
+| **DELETE** | /rcas/{id}/attachments/{aid} | Remove attachment | Uploader, Lead, Admin |
+| **POST** | /rcas/{id}/signoffs/{role} | Sign off (own role only) | Matching role |
+| **GET** | /rcas/{id}/audit | Change history | Lead, Owner, Admin |
+| **GET** | /rcas/{id}/export?format=pdf\|docx | Download one RCA | All |
+| **GET** | /rcas/{id}/print | Print-optimised HTML (also the source for PDF) | All |
+| **GET** | /rcas/export?format=csv\|xlsx | Download filtered RCA list | All |
+| **GET** | /templates/rca-blank.docx | Blank template for offline use | All |
+| **GET** | /dashboard/summary | KPI numbers and chart data | All |
+| **GET** | /my-tasks | Sections and actions assigned to current user | All |
+| **CRUD** | /users, /projects, /companies | Master data | Admin |
+
+**5.2 Sample: create RCA**
+
+> POST /api/v1/rcas
+>
+> {
+>
+> "rca_date": "2026-09-28",
+>
+> "project_id": "7c1f...",
+>
+> "team_leader_id": "a90d...",
+>
+> "ticket_id": "INC-10452",
+>
+> "severity": "P2",
+>
+> "environment": "PROD",
+>
+> "incident_start": "2026-09-27T14:05:00+05:30",
+>
+> "summary": "Payment API returned 500 for 40 minutes."
+>
+> }
+>
+> 201 Created
+>
+> { "id": "e3b2...", "rca_number": "RCA-2026-0007", "status": "DRAFT",
+> "version": 1 }
+
+**5.3 Sample: save a team section**
+
+> PUT /api/v1/rcas/{id}/sections/QA
+>
+> {
+>
+> "version": 3,
+>
+> "cause_category": "TEST_GAP",
+>
+> "escape_analysis": "No regression case for null currency.",
+>
+> "extra_1": "Payment regression suite missed edge cases.",
+>
+> "extra_2": "TC-882, TC-883",
+>
+> "whys": \[ {"why_no":1,"answer":"..."}, {"why_no":5,"answer":"..."}
+> \],
+>
+> "prev_process": "Add edge-case checklist to release sign-off",
+>
+> "completion_status": "IN_PROGRESS"
+>
+> }
+>
+> 200 OK { "version": 4, "section_status": "IN_PROGRESS" }
+
+**5.4 Standard errors**
+
+| **Code** | **Meaning** | **Example** |
+|----|----|----|
+| **400** | Validation failed | { "error":"VALIDATION", "fields":{"detected_at":"Must be after incident_start"} } |
+| **401 / 403** | Not logged in / no permission | Dev user editing the QA section |
+| **404** | Not found | RCA id does not exist or is soft deleted |
+| **409** | Version conflict or invalid state | Section changed by someone else, or section already SUBMITTED |
+| **422** | Business rule failed | Cannot close: 2 actions still open |
+
+**6. UI Design**
+
+------------------------------------------------------------------------
+
+**6.1 Screens**
+
+| **Screen** | **Content** | **Notes** |
+|----|----|----|
+| **Login** | Email and password (or SSO) | Redirect by role |
+| **Dashboard** | KPI cards: Open RCAs, In review, Closed this month, Overdue actions, Average time to resolve. Charts: RCAs by severity, by cause category, by project, and sections pending by team | Click a card to open the filtered list |
+| **RCA list** | Table: RCA no, date, project, severity, status, team leader, progress (Dev / QA / Prod chips). Filters and search. Buttons: New RCA, Export list | Overdue rows highlighted |
+| **RCA create / edit** | Tabs: 1 Header, 2 Common, 3 Dev, 4 QA, 5 Production, 6 Closing. Each tab shows a status badge (Not started / In progress / Submitted) | Users see all tabs, but edit only their own |
+| **RCA view** | Read-only page in the same order as the Word template, with Print, PDF and Word buttons | Also used for review |
+| **My tasks** | Sections waiting for me and actions I own, sorted by due date | Personal home for team members |
+| **Masters (Admin)** | Users, Projects, Companies | Admin only |
+| **Audit log** | Filter by RCA, user, date | Owner and Admin |
+
+**6.2 Form behaviour**
+
+- Header tab: RCA number is read-only; Company and Project Owner fill
+  automatically after choosing Project.
+
+- Common tab: Timeline and other tables have an Add row button and
+  inline editing.
+
+- Team tabs: the Cause field shows Why 1 to Why 5 as five stacked text
+  boxes; Why 5 is labelled Root cause. Cause category is a dropdown.
+
+- Team tabs: the escape-analysis and extra prompts use the team-specific
+  labels from Section 4.6, so each team sees its own wording.
+
+- Actions table: rows with Action, Owner (user picker), Due date (date
+  picker), Status (dropdown); overdue rows show in red.
+
+- Buttons on team tab: Save draft (auto-save every 60 seconds), Submit
+  section. After submit the form is read-only with an Unlock button for
+  Lead and Admin.
+
+- Closing tab: Lessons learned, Follow-ups table, Attachments (drag and
+  drop, max 10 MB per file), Sign-off table where each person clicks
+  Sign for their own role.
+
+- Read-only fields for users without permission are greyed out, not
+  hidden.
+
+- Unsaved-changes warning when leaving a tab; a conflict message when
+  the API returns 409.
+
+**6.3 Look and feel**
+
+- Colours follow the template: navy (#1F3864) for headings and table
+  headers, light blue (#D9E2F3) for labels.
+
+- Severity chips: P1 red, P2 orange, P3 yellow, P4 grey. Status chips:
+  Draft grey, In review blue, Closed green.
+
+- Responsive down to tablet width; the print view is A4 portrait only.
+
+- Show a visible blameless-RCA note at the top of every RCA page.
+
+**7. Print and Download**
+
+------------------------------------------------------------------------
+
+The most important rule: the printed page, the PDF and the Word file
+must all match the approved template layout.
+
+| **Output** | **How it is built** | **Notes** |
+|----|----|----|
+| **Print** | Browser print of /rcas/{id}/print using a print stylesheet (@media print) | Hides menus and buttons |
+| **PDF** | Server renders the same /print page with headless Chromium (Puppeteer or Playwright) so PDF looks identical to print | File name: RCA-2026-0007_ProjectName_v1.pdf |
+| **Word (.docx)** | Server builds the file from the RCA data using the same section order and tables as RCA_Template.docx (docx library) | Editable copy for sharing |
+| **Blank template** | Static RCA_Template.docx served from /templates | For offline use |
+| **List export** | CSV or Excel of the filtered RCA list, one row per RCA (and optionally one row per action) | For management reports |
+
+**7.1 Print layout rules**
+
+- Page: A4 portrait, 20 mm margins, Calibri 10.5 pt (fallback Arial).
+
+- Order: Title and header grid, 1 Common sections, 2 Dev, QA and
+  Production (each starting on a new page), 3 Closing sections and
+  Sign-off.
+
+- Repeat the table header row on every page (thead display:
+  table-header-group); avoid splitting a row across pages
+  (page-break-inside: avoid).
+
+- Header line on every page: RCA number, project and severity. Footer:
+  Confidential, Page X of Y, generated date and time.
+
+- Show a DRAFT watermark unless status is CLOSED.
+
+- Empty fields print as an empty box, not hidden, so the printout can
+  also be handwritten.
+
+- Sign-off table prints with signature and date columns even when signed
+  digitally (digital sign shows name and date).
+
+- Every export and print action is written to audit_log (action EXPORT).
+
+**8. Non-functional Requirements**
+
+------------------------------------------------------------------------
+
+| **Area** | **Requirement** |
+|----|----|
+| **Security** | HTTPS only; hashed passwords (bcrypt/argon2) or SSO; permission check on every endpoint on the server, not only in the UI; input sanitised to prevent XSS and SQL injection. |
+| **Files** | Allowed types: pdf, png, jpg, txt, log, csv, xlsx, docx, zip. Max 10 MB. Random storage name; never execute uploaded files. |
+| **Audit** | All create, update, submit, sign, close, reopen and export events logged with user and time; audit rows cannot be edited. |
+| **Performance** | List page under 2 seconds for 10,000 RCAs; PDF export under 10 seconds. |
+| **Backup** | Daily database backup and file store backup; restore tested. |
+| **Time zone** | Store UTC, display IST; timeline entries show the zone. |
+| **Retention** | Closed RCAs are never hard deleted; soft delete by Admin only. |
+
+**9. Build Plan and Acceptance Criteria**
+
+------------------------------------------------------------------------
+
+**9.1 Suggested phases**
+
+| **Phase** | **Deliverable** |
+|----|----|
+| **1 Foundation** | Database migration scripts, login, roles, masters (users, projects, companies) |
+| **2 Core RCA** | Create and edit RCA header and common sections, RCA list and filters |
+| **3 Team sections** | Dev, QA, Production sections with 5 Whys, actions, submit and lock, version conflict handling |
+| **4 Workflow** | Closing sections, sign-offs, review, close and reopen, audit log |
+| **5 Output** | Print view, PDF and DOCX export, blank template, list export |
+| **6 Dashboard** | KPI cards, charts, My tasks, overdue highlighting; UAT and fixes |
+
+**9.2 Acceptance criteria**
+
+- A Dev user can edit the Dev section but gets a 403 when editing QA or
+  Production.
+
+- Two users saving different team sections at the same time never lose
+  each other's data.
+
+- An RCA cannot move to IN_REVIEW until all three sections are
+  submitted, and cannot close until all sign-offs are done.
+
+- The printed PDF shows all fields of the approved template in the same
+  order, with repeated table headers and page numbers.
+
+- The Word export opens in Microsoft Word without errors and matches the
+  template structure.
+
+- The DRAFT watermark appears on print and PDF until the RCA is closed.
+
+- Every status change and export is visible in the audit log.
+
+- The dashboard numbers match the RCA list filters.
+
+**10. Open Questions**
+
+------------------------------------------------------------------------
+
+- Login: company SSO (Google / Microsoft) or local accounts?
+
+- Should one RCA cover one project only, or can it span multiple
+  projects?
+
+- Is a single Production section enough, or should Production and DevOps
+  be separate?
+
+- Should digital sign-off be a simple click, or must it also capture a
+  signature image?
+
+- Preferred stack (backend language, database, hosting) so the schema
+  and API can be finalised.
+
+- Do you need email reminders for due actions in v1?

@@ -1,0 +1,34 @@
+{
+  "name": "rca-admin-dashboard",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @rca/api\" \"npm run dev -w @rca/web\"",
+    "build": "npm run build -w @rca/api && npm run build -w @rca/web",
+    "db:migrate": "npm run db:migrate -w @rca/api",
+    "db:migrate:dev": "npm run db:migrate:dev -w @rca/api --",
+    "db:seed": "npm run db:seed -w @rca/api",
+    "lint": "eslint . --max-warnings=0 && npm run typecheck -w @rca/api && npm run typecheck -w @rca/web",
+    "test": "npm run test -w @rca/api && npm run test -w @rca/web",
+    "test:e2e": "npm run test:e2e -w @rca/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "concurrently": "^10.0.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.70.1"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true
+  },
+  "type": "module"
+}
