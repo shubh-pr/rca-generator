@@ -33,6 +33,7 @@ apps/api/                 Express API (npm workspace "@rca/api")
   src/services/           Business logic (RCA number, workflow rules, queries)
   src/export/             print HTML, PDF, DOCX, CSV/XLSX
   test/                   Vitest API tests (supertest), run against the rca_test database
+  scripts/prepareE2eDb.ts Creates/migrates/re-seeds the rca_e2e database for Playwright
 apps/web/                 React app (npm workspace "@rca/web")
   src/api/                fetch client + TanStack Query hooks
   src/components/         Shared UI (chips, badges, layout, form fields)
@@ -63,14 +64,24 @@ docs/                     Spec, assumptions, plan
 npm install                          # install all workspaces
 npx playwright install chromium      # browser for PDF export + e2e (once)
 cp apps/api/.env.example apps/api/.env
-docker compose up -d db              # start postgres only (localhost:5433)
+docker compose up -d db              # start postgres only (host port 5433; override with DB_PORT)
 npm run db:migrate                   # prisma migrate deploy (dev DB)
 npm run db:seed                      # seed users/company/project/sample RCAs (idempotent)
 npm run dev                          # api on :4000, web on :5173 (proxies /api)
 npm run lint                         # eslint + tsc --noEmit for both apps
-npm test                             # API tests (resets rca_test DB) + web unit tests
-npm run test:e2e                     # Playwright full flow (starts api + web itself)
+npm test                             # API tests on rca_test (created/migrated automatically) + web unit tests
+npm run test:e2e                     # Playwright: re-seeds rca_e2e, starts api :4100 + web :5174 itself
 docker compose up --build            # whole stack: http://localhost:8080
 ```
 
 New migration during development: `npm run db:migrate:dev -- --name <name>` (runs `prisma migrate dev`).
+
+## Notes for working in this repo
+
+- Never run `prisma migrate reset` (Prisma blocks it for AI agents). Test databases are prepared by
+  `migrate deploy` + TRUNCATE; the scripts refuse any database not named `*_test` / `*_e2e`.
+- Tests share one database and run serially (`fileParallelism: false`); each file calls `resetDb()`.
+- `/rcas/export` must stay registered before `/rcas/:id` routes (see `src/app.ts`).
+- The print HTML (`src/export/printHtml.ts`) and DOCX (`src/export/docx.ts`) both render
+  `src/export/model.ts`; change the template order there, not in each renderer.
+- Docker Desktop on macOS cannot bind-mount from ~/Documents here, so compose uses named volumes only.

@@ -1,3 +1,4 @@
+import http from 'node:http';
 import type { Team, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
@@ -6,7 +7,11 @@ import { signAccessToken } from '../src/auth/jwt.js';
 import { prisma } from '../src/db.js';
 
 export const app = createApp();
-export const api = () => request(app);
+// One server bound explicitly to 127.0.0.1. supertest's default (a new ephemeral server per request on
+// all interfaces) can collide with other local processes on macOS and receive their responses.
+const server = http.createServer(app).listen(0, '127.0.0.1');
+server.unref();
+export const api = () => request(server);
 export { prisma };
 
 export const PASSWORD = 'Password@123';

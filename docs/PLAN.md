@@ -49,3 +49,7 @@ Deliverable: database migration scripts, login, roles, masters (users, projects,
 - **Web:** KPI cards linking to filtered lists, charts, My tasks, overdue highlighting.
 - **Tests:** dashboard numbers equal list totals for the same filter; my-tasks content; Playwright full flow (create, 3 teams submit, review, sign-off, close, download PDF).
 - **Docker:** full `docker compose up` (migrate + seed on start), README.
+
+## Status
+
+All six phases are implemented and committed, one commit per phase. See the README for test coverage of the acceptance criteria.

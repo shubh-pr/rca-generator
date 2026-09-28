@@ -6,7 +6,8 @@ import { can, homeFor } from './lib/permissions';
 import { CompaniesPage } from './pages/admin/CompaniesPage';
 import { ProjectsPage } from './pages/admin/ProjectsPage';
 import { UsersPage } from './pages/admin/UsersPage';
-import { HomePage } from './pages/HomePage';
+import { DashboardPage } from './pages/DashboardPage';
+import { MyTasksPage } from './pages/MyTasksPage';
 import { LoginPage } from './pages/LoginPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
 import { RcaListPage } from './pages/rca/RcaListPage';
@@ -47,8 +48,8 @@ export const router = createBrowserRouter([
         element: <Layout />,
         children: [
           { index: true, element: <Home /> },
-          { path: 'dashboard', element: <HomePage /> },
-          { path: 'my-tasks', element: <HomePage /> },
+          { path: 'dashboard', element: <DashboardPage /> },
+          { path: 'my-tasks', element: <MyTasksPage /> },
           { path: 'rcas', element: <RcaListPage /> },
           { path: 'rcas/new', element: <RcaNewPage /> },
           { path: 'rcas/:id', element: <RcaViewPage /> },

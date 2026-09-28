@@ -12,7 +12,9 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "test": "vitest run",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "e2e:prepare": "tsx scripts/prepareE2eDb.ts",
+    "e2e:serve": "npm run e2e:prepare && tsx src/server.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

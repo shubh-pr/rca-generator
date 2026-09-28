@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.env
+apps/api/uploads
+apps/api/test-uploads
+apps/web/test-results
+apps/web/playwright-report
+.git
+docs/*.docx

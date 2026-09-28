@@ -42,7 +42,7 @@ describe('masters: companies and projects', () => {
       .post('/api/v1/projects')
       .set(h)
       .send({ company_id: c.body.id, name: 'Payments', owner_user_id: a.PROJECT_OWNER.id });
-    expect(p.status).toBe(201);
+    expect(p.status, JSON.stringify(p.body)).toBe(201);
     expect(p.body.company.name).toBe('Acme');
     expect(p.body.owner.id).toBe(a.PROJECT_OWNER.id);
 

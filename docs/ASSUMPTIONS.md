@@ -68,3 +68,22 @@ Where the spec (`docs/SPEC.md`) was silent or ambiguous I took the simplest reas
 - **DRAFT marking:** the print and PDF show a diagonal DRAFT watermark on every page until CLOSED (IN_REVIEW RCAs are also marked DRAFT). The spec requires the watermark only for print and PDF. The `docx` library has no watermark support, so the Word file shows a red "DRAFT" in the page header instead.
 - **Export audit:** opening the print view counts as a print export and writes `EXPORT {format: "print"}`, because the browser's own print dialog cannot be observed. List export and blank-template downloads are audited with `entity = rca_list` or `template` and a nil UUID `entity_id`.
 - **List export:** CSV or XLSX with the same filters as the list, one row per RCA by default, or `rows=actions` for one row per action. CSV cells starting with `= + - @` are prefixed with `'` to prevent formula injection. The export is capped at 50,000 rows.
+
+## Dashboard and My tasks
+
+- **KPI definitions:**
+  - Open RCAs: DRAFT plus IN_REVIEW.
+  - In review: IN_REVIEW.
+  - Closed this month: `closed_at` in the current IST calendar month.
+  - Overdue actions: the number of overdue actions. The card also shows how many RCAs they belong to, and clicking it opens the list filtered to those RCAs.
+  - Average time to resolve: the mean of `resolved_at − incident_start`, in hours, over the filtered RCAs that have `resolved_at`.
+- **Dashboard filters:** the summary accepts the same filters as the RCA list (the UI exposes the project). Every count except cause category is computed with the list's filter code and returns the filter that reproduces it, so a click opens a list with the same total.
+- **Cause-category chart:** it counts team sections (one RCA can have up to 3 causes). The list has no cause filter, so these bars do not link to the list.
+- **My tasks:** "sections waiting for me" are sections of the user's own team, or sections where the user is the named contributor, that are not submitted on DRAFT RCAs. They are sorted by target date, falling back to the RCA date. "Actions I own" are the user's actions that are not completed and not moved to follow-ups on RCAs that are not closed, sorted by due date.
+- **Landing page after login:** Dev, QA and Production users land on My tasks; everyone else lands on the Dashboard.
+
+## Not built in v1 (out of scope per the spec or the product owner)
+
+- Email or Slack notifications, SSO, Jira or ServiceNow integration, multi-language support, and signature images.
+- Backups (SPEC 8, "daily database backup … restore tested") are an operations task and are not part of the application. The `pgdata` and `uploads` Docker volumes are what need backing up.
+- HTTPS (SPEC 8): the app serves plain HTTP on localhost. Terminate TLS at a reverse proxy or load balancer in front of the `web` container.

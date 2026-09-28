@@ -11,6 +11,7 @@ import { rcasRouter } from './routes/rcas.js';
 import { sectionsRouter } from './routes/sections.js';
 import { attachmentsRouter } from './routes/attachments.js';
 import { auditRouter } from './routes/audit.js';
+import { dashboardRouter } from './routes/dashboard.js';
 import { exportsRouter } from './routes/exports.js';
 import { followupsRouter } from './routes/followups.js';
 import { workflowRouter } from './routes/workflow.js';
@@ -43,6 +44,7 @@ export function createApp() {
   secured.use(followupsRouter);
   secured.use(attachmentsRouter);
   secured.use(auditRouter);
+  secured.use(dashboardRouter);
   api.use(secured);
 
   api.use(() => {
