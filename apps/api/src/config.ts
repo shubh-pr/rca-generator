@@ -85,8 +85,20 @@ export const envSchema = z
     JOBS_ENABLED: bool(true),
     JOBS_INTERVAL_MINUTES: int(60, 1),
 
+    // ---------- Sign in with Google / Microsoft (docs/OAUTH_SETUP.md) ----------
     GOOGLE_CLIENT_ID: optional,
     GOOGLE_CLIENT_SECRET: optional,
+    MICROSOFT_CLIENT_ID: optional,
+    MICROSOFT_CLIENT_SECRET: optional,
+    /** Entra ID tenant: "common" (work, school and personal accounts), "organizations", "consumers" or a tenant ID. */
+    MICROSOFT_TENANT: z
+      .string()
+      .regex(/^[A-Za-z0-9.-]{1,100}$/, 'must be common, organizations, consumers or a tenant ID')
+      .default('common'),
+    /** Public origin the providers redirect back to (…/api/v1/auth/<provider>/callback). Defaults to APP_URL. */
+    OAUTH_REDIRECT_BASE_URL: z.string().url().optional(),
+    /** Development and tests only: base URL of a fake OpenID provider that replaces Google and Microsoft. */
+    OAUTH_TEST_PROVIDER_URL: z.string().url().optional(),
 
     SEED_DEMO: bool(false),
 
@@ -127,6 +139,15 @@ export const envSchema = z
     need(e.STORAGE_DRIVER === 's3' && (!e.S3_BUCKET || !e.S3_ACCESS_KEY_ID || !e.S3_SECRET_ACCESS_KEY), 'S3_BUCKET', 'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3');
     need(prod && e.STORAGE_DRIVER === 'local', 'STORAGE_DRIVER', 'local disk storage is for development only; use s3 in production');
     need(!!e.GOOGLE_CLIENT_ID !== !!e.GOOGLE_CLIENT_SECRET, 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together');
+    need(!!e.MICROSOFT_CLIENT_ID !== !!e.MICROSOFT_CLIENT_SECRET, 'MICROSOFT_CLIENT_SECRET', 'MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET must be set together');
+    // The callback sets the session cookie, so it must be served from the origin the app runs on.
+    need(
+      !!e.OAUTH_REDIRECT_BASE_URL && new URL(e.OAUTH_REDIRECT_BASE_URL).origin !== new URL(e.APP_URL).origin,
+      'OAUTH_REDIRECT_BASE_URL',
+      'must have the same origin (scheme, host and port) as APP_URL',
+    );
+    need(prod && !!e.OAUTH_REDIRECT_BASE_URL && !e.OAUTH_REDIRECT_BASE_URL.startsWith('https://'), 'OAUTH_REDIRECT_BASE_URL', 'must use https in production');
+    need(prod && !!e.OAUTH_TEST_PROVIDER_URL, 'OAUTH_TEST_PROVIDER_URL', 'replaces Google and Microsoft with a fake provider; never set it in production');
     need(
       prod && e.PAYMENT_PROVIDER === 'mock' && !e.ALLOW_MOCK_PAYMENTS,
       'PAYMENT_PROVIDER',
@@ -205,7 +226,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     pdf: { timeoutMs: e.PDF_TIMEOUT_MS, concurrency: e.PDF_CONCURRENCY, chromiumSandbox: e.PDF_CHROMIUM_SANDBOX, internalBaseUrlOverride: e.INTERNAL_BASE_URL },
     accountDeletionGraceMs: e.ACCOUNT_DELETION_GRACE_DAYS * 86_400_000,
     jobs: { enabled: e.JOBS_ENABLED, intervalMs: e.JOBS_INTERVAL_MINUTES * 60_000 },
-    google: { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET },
+    oauth: {
+      redirectBaseUrl: (e.OAUTH_REDIRECT_BASE_URL ?? e.APP_URL).replace(/\/$/, ''),
+      testProviderUrl: e.OAUTH_TEST_PROVIDER_URL?.replace(/\/$/, ''),
+      google: { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET },
+      microsoft: { clientId: e.MICROSOFT_CLIENT_ID, clientSecret: e.MICROSOFT_CLIENT_SECRET, tenant: e.MICROSOFT_TENANT },
+    },
     seedDemo: e.SEED_DEMO,
     billing: {
       provider: e.PAYMENT_PROVIDER,

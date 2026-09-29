@@ -11,6 +11,7 @@ import { acceptPendingInvitationsFor } from '../services/invitations.js';
 import { unscoped } from '../tenancy/context.js';
 import { verifyCaptcha } from './captcha.js';
 import { clearSessionCookies, REFRESH_COOKIE, requireCsrf, setSessionCookies } from './cookies.js';
+import { enabledProviders } from './oauth/providers.js';
 import { consumeEmailToken, issueEmailToken } from './emailTokens.js';
 import { meView } from './me.js';
 import { currentSessionId, currentUser, requireAuth } from './middleware.js';
@@ -247,6 +248,18 @@ accountRouter.post('/auth/change-password', async (req, res) => {
   res.json({ message: 'Password changed. Other devices were signed out.' });
 });
 
+/** Add a password to an account that signs in only with Google or Microsoft. */
+accountRouter.post('/me/password', async (req, res) => {
+  const me = currentUser(req);
+  const { new_password } = parse(z.object({ new_password: zPassword }).strict(), req.body);
+  const user = await users(() => prisma.user.findUniqueOrThrow({ where: { id: me.id } }));
+  if (user.password_hash) throw conflict('A password is already set. Use Change password instead.');
+  checkNewPassword(new_password, user.email, 'new_password');
+  await users(async () => prisma.user.update({ where: { id: me.id }, data: { password_hash: await hashPassword(new_password) } }));
+  await securityEvent(me.id, 'PASSWORD_SET', {}, req);
+  res.json({ message: 'Password set. You can now also sign in with your email and password.' });
+});
+
 accountRouter.post('/auth/logout-all', async (req, res) => {
   const me = currentUser(req);
   await revokeAllSessions(me.id);
@@ -311,7 +324,8 @@ export const publicConfigRouter = Router();
 publicConfigRouter.get('/config/public', (_req, res) => {
   res.json({
     turnstile_site_key: config.turnstile.enabled ? config.turnstile.siteKey : null,
-    google_enabled: !!config.google.clientId,
+    google_enabled: enabledProviders().google,
+    microsoft_enabled: enabledProviders().microsoft,
     password_min_length: 10,
   });
 });

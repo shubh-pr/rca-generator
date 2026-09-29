@@ -29,7 +29,8 @@ export async function streamDataExport(userId: string, res: Response, pdfBaseUrl
     const security = await prisma.auditLog.findMany({ where: { category: 'SECURITY', user_id: userId }, orderBy: { at: 'asc' } });
     const rcas = await prisma.rca.findMany({ where: { is_deleted: false, workspace: { owner_id: userId } }, include: { ...rcaInclude, workspace: true }, orderBy: { rca_number: 'asc' } });
     const uploads = await prisma.rcaAttachment.findMany({ where: { uploaded_by: userId, kind: 'FILE', file_path: { not: null } }, select: { id: true, file_name: true, file_path: true, rca_id: true } });
-    return { user, memberships, collaborations, security, rcas, uploads, sessions: await listSessions(userId) };
+    const identities = await prisma.userIdentity.findMany({ where: { user_id: userId }, select: { provider: true, email: true, linked_at: true, last_used_at: true } });
+    return { user, memberships, collaborations, security, rcas, uploads, identities, sessions: await listSessions(userId) };
   });
 
   const stamp = new Date().toISOString().slice(0, 10);
@@ -44,7 +45,7 @@ export async function streamDataExport(userId: string, res: Response, pdfBaseUrl
       'RCA Dashboard: export of your data',
       `Created: ${new Date().toISOString()}`,
       '',
-      'account.json         your profile, workspaces, direct RCA access, active sessions',
+      'account.json         your profile, workspaces, direct RCA access, connected sign-in accounts, active sessions',
       'security-log.json    logins, password and email changes, invitations, exports',
       'rcas/<number>.json   every RCA in the workspaces you own (all sections, actions, sign-offs, history is in the app)',
       'rcas/<number>.pdf    the same RCAs as printable PDF',
@@ -52,7 +53,7 @@ export async function streamDataExport(userId: string, res: Response, pdfBaseUrl
     ].join('\n'),
     { name: 'README.txt' },
   );
-  zip.append(json({ user: data.user, workspaces: data.memberships.map((m) => ({ ...m.workspace, role: m.role, team: m.team })), rca_access: data.collaborations, sessions: data.sessions }), { name: 'account.json' });
+  zip.append(json({ user: data.user, workspaces: data.memberships.map((m) => ({ ...m.workspace, role: m.role, team: m.team })), rca_access: data.collaborations, connected_accounts: data.identities, sessions: data.sessions }), { name: 'account.json' });
   zip.append(json(data.security), { name: 'security-log.json' });
 
   for (const rca of data.rcas) {
