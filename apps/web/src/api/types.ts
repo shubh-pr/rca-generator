@@ -172,6 +172,8 @@ export interface RcaSummary {
 export interface RcaPermissions {
   role: WorkspaceRole;
   teams: Team[];
+  /** Set when a collaborator is read-only because the workspace has no active Team subscription. */
+  read_only_reason: 'SUBSCRIPTION_INACTIVE' | null;
   support: boolean;
   edit: boolean;
   delete: boolean;
@@ -219,6 +221,8 @@ export interface Rca extends Omit<RcaSummary, 'sections' | 'workspace'> {
   attachments: Attachment[];
   signoffs: Signoff[];
   permissions: RcaPermissions;
+  paid_at: string | null;
+  billing: { paid: boolean; paid_at: string | null; workspace_subscribed: boolean; watermarked: boolean };
 }
 
 export interface AuditEntry {
@@ -251,4 +255,44 @@ export interface PendingInvitation {
   team: Team | null;
   expires_at: string;
   created_at: string;
+}
+
+export type BillingPlan = 'NONE' | 'SOLO' | 'TEAM';
+export type SubscriptionStatus = 'NONE' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED';
+
+export interface WorkspaceBilling {
+  workspace_id: string;
+  plan: BillingPlan;
+  subscription_status: SubscriptionStatus;
+  current_period_end: string | null;
+  seats: number;
+  seats_used: number;
+  entitled: boolean;
+  team: boolean;
+  is_billing_owner: boolean;
+  bucket: { unpaid: number; limit: number; full: boolean; applies: boolean };
+  collaborators_read_only: boolean;
+  has_billing_account: boolean;
+  test_mode: boolean;
+}
+
+export interface Pricing {
+  currency: string;
+  test_mode: boolean;
+  free: { rca_limit: number; watermark: boolean };
+  rca_unlock: { amount_cents: number };
+  solo: { amount_cents: number; interval: string };
+  team: { base_cents: number; seat_cents: number; interval: string; min_seats: number; max_seats: number };
+}
+
+export interface BillingHistoryRow {
+  id: string;
+  kind: 'RCA_UNLOCK' | 'SUBSCRIPTION';
+  description: string;
+  amount_cents: number;
+  currency: string;
+  status: 'PAID' | 'FAILED';
+  reference: string | null;
+  occurred_at: string;
+  rca: { id: string; rca_number: string } | null;
 }

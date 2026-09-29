@@ -13,6 +13,10 @@ import { LoginPage } from './pages/LoginPage';
 import { ContactPage, PrivacyPage, TermsPage } from './pages/public/LegalPages';
 import { LandingPage } from './pages/public/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { BillingPage } from './pages/settings/BillingPage';
+import { PricingPage } from './pages/billing/PricingPage';
+import { TestCheckoutPage } from './pages/billing/TestCheckoutPage';
+import { TestPortalPage } from './pages/billing/TestPortalPage';
 import { WelcomePage } from './pages/WelcomePage';
 import { InvitePage } from './pages/InvitePage';
 import { AdminPage } from './pages/AdminPage';
@@ -54,6 +58,7 @@ export const router = createBrowserRouter([
       { path: '/terms', element: <TermsPage /> },
       { path: '/privacy', element: <PrivacyPage /> },
       { path: '/contact', element: <ContactPage /> },
+      { path: '/pricing', element: <PricingPage /> },
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/verify-email', element: <VerifyEmailPage /> },
@@ -66,11 +71,14 @@ export const router = createBrowserRouter([
     element: <RequireAuth />,
     children: [
       { path: 'rcas/:id/print', element: <RcaPrintPage /> },
+      { path: 'billing/test-checkout/:sessionId', element: <TestCheckoutPage /> },
+      { path: 'billing/test-portal/:wid', element: <TestPortalPage /> },
       {
         element: <Layout />,
         children: [
           { path: 'welcome', element: <WelcomePage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'settings/billing', element: <BillingPage /> },
           { path: 'workspaces', element: <WorkspacesPage /> },
           { path: 'admin', element: <AdminPage /> },
           { path: 'workspaces/:wid', element: <WorkspaceDetailPage /> },

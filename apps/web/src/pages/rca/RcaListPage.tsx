@@ -1,4 +1,5 @@
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { BucketIndicator, bucketWorkspaceId } from '../../components/BillingBits';
 import { ErrorBanner, Pagination, Select, TextInput } from '../../components/Form';
 import { ProgressChips, SeverityChip, StatusChip } from '../../components/Chips';
 import { useAuth } from '../../lib/auth';
@@ -37,6 +38,7 @@ export function RcaListPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1>RCA list</h1>
+        <BucketIndicator workspaceId={bucketWorkspaceId(user, current)} />
         <div className="flex gap-2">
           <ListExportButtons filters={{ ...wsFilter, ...filters }} />
           {creatableWorkspaces(user).length > 0 && (

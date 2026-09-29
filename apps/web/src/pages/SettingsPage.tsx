@@ -6,11 +6,13 @@ import { ErrorBanner, Field, TextInput } from '../components/Form';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/dates';
 import { AccountLifecycle } from './settings/AccountLifecycle';
+import { SettingsTabs } from './settings/SettingsTabs';
 
 export function SettingsPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <h1>Account settings</h1>
+      <SettingsTabs />
       <Profile />
       <Usage />
       <ChangePassword />

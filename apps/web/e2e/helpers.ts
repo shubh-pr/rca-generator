@@ -115,3 +115,16 @@ export async function signUpAndVerify(browser: Browser, name: string, email: str
   await expect(page.getByTestId('current-user')).toHaveText(name);
   return page;
 }
+
+/** Subscribe a workspace the page's user owns to Team through the TEST MODE checkout. */
+export async function subscribeTeamViaUi(page: Page, workspaceName: string, seats = 5) {
+  await page.goto('/settings/billing');
+  const card = page.getByRole('region', { name: `Billing for ${workspaceName}` });
+  await card.getByLabel('Team seats').fill(String(seats));
+  await card.getByRole('button', { name: /Subscribe to Team/ }).click();
+  await page.waitForURL(/\/billing\/test-checkout\//);
+  await expect(page.getByTestId('test-mode')).toBeVisible();
+  await page.getByRole('button', { name: 'Simulate successful payment' }).click();
+  await page.waitForURL(/\/settings\/billing\?checkout=done/);
+  await expect(page.getByRole('region', { name: `Billing for ${workspaceName}` }).getByTestId('billing-plan')).toHaveText('Team');
+}
