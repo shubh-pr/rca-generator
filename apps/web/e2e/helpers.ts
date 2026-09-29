@@ -71,3 +71,43 @@ export async function createRcaViaUi(page: Page, opts: { workspace?: string; sum
   await expect(page.getByRole('button', { name: 'Save common sections' })).toBeDisabled();
   return { rcaPath, rcaNumber };
 }
+
+import fs from 'node:fs';
+import { MAIL_LOG } from '../playwright.config';
+
+/** Wait for the console mailer to log an email to `to` and return the token from its link. */
+export async function tokenFromMail(to: string, template: string): Promise<string> {
+  for (let i = 0; i < 50; i++) {
+    const lines = fs.existsSync(MAIL_LOG) ? fs.readFileSync(MAIL_LOG, 'utf8').trim().split('\n').filter(Boolean) : [];
+    const mail = lines.map((l) => JSON.parse(l) as { to: string; template: string; text: string }).reverse().find((m) => m.to === to && m.template === template);
+    const token = mail && /token=([A-Za-z0-9_-]+)/.exec(mail.text)?.[1];
+    if (token) return token;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`No ${template} email for ${to}`);
+}
+
+export const uniqueEmail = (prefix: string) => `${prefix}.${Date.now()}.${Math.floor(Math.random() * 1e6)}@e2e.test`;
+export const STRONG_PASSWORD = 'Harbour-Lantern-Forty-2';
+
+/** Sign up through the UI and verify through the emailed link; returns a logged-in page. */
+export async function signUpAndVerify(browser: Browser, name: string, email: string, password = STRONG_PASSWORD): Promise<Page> {
+  const page = await (await browser.newContext()).newPage();
+  page.on('dialog', (d) => d.accept());
+  await page.goto('/signup');
+  await page.fill('#name', name);
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.getByTestId('accept-terms').check();
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+  const token = await tokenFromMail(email, 'verify-email');
+  await page.goto(`/verify-email?token=${token}`);
+  await expect(page.getByText('Your email is verified')).toBeVisible();
+  await page.goto('/login');
+  await page.fill('#email', email);
+  await page.fill('#password', password);
+  await page.click('button[type=submit]');
+  await expect(page.getByTestId('current-user')).toHaveText(name);
+  return page;
+}

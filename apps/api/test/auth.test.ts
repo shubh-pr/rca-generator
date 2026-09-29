@@ -12,11 +12,11 @@ describe('auth', () => {
   it('logs in with email and password and returns a token and the profile with workspaces', async () => {
     const res = await api().post('/api/v1/auth/login').send({ email: user.email.toUpperCase(), password: PASSWORD });
     expect(res.status).toBe(200);
-    expect(res.body.token).toEqual(expect.any(String));
+    expect(res.body.access_token).toEqual(expect.any(String));
     expect(res.body.user).toMatchObject({ email: user.email, email_verified: true });
     expect(res.body.user.password_hash).toBeUndefined();
     expect(res.body.user.workspaces).toEqual([expect.objectContaining({ id: user.personalWorkspaceId, role: 'OWNER', is_personal: true })]);
-    const me = await api().get('/api/v1/me').set({ Authorization: `Bearer ${res.body.token}` });
+    const me = await api().get('/api/v1/me').set({ Authorization: `Bearer ${res.body.access_token}` });
     expect(me.status).toBe(200);
     expect(me.body.id).toBe(user.id);
   });

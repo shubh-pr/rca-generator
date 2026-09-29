@@ -1,11 +1,15 @@
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 4100;
 const WEB_PORT = 5174;
 const DB = process.env.E2E_DATABASE_URL ?? 'postgresql://rca:rca@localhost:5433/rca_e2e';
+/** The console email provider appends every email here; tests read verification links from it. */
+export const MAIL_LOG = path.resolve(import.meta.dirname, 'e2e/.mail.log');
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/global-setup.ts',
   timeout: 180_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
@@ -31,6 +35,12 @@ export default defineConfig({
         JWT_SECRET: 'e2e-secret',
         NODE_ENV: 'development',
         SEED_DEMO: 'true',
+        EMAIL_PROVIDER: 'console',
+        MAIL_LOG_FILE: MAIL_LOG,
+        APP_URL: `http://localhost:${WEB_PORT}`,
+        LOGIN_MAX_PER_IP: '1000',
+        SIGNUP_MAX_PER_IP: '1000',
+        EMAIL_MAX_PER_IP: '1000',
         UPLOAD_DIR: './test-uploads/e2e',
         CORS_ORIGIN: `http://localhost:${WEB_PORT}`,
       },

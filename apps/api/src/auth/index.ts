@@ -1,4 +1,4 @@
-// Single entry point for authentication. Replace the internals here to add SSO.
-export { authRouter, meRouter } from './routes.js';
-export { requireAuth, currentUser } from './middleware.js';
+// Single entry point for authentication. Google sign-in plugs in here too.
+export { accountRouter, authRouter, publicConfigRouter } from './routes.js';
+export { currentSessionId, currentUser, requireAuth } from './middleware.js';
 export { hashPassword, verifyPassword } from './password.js';

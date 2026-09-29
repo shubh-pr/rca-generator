@@ -112,3 +112,39 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 - **Migrated legacy data.** Existing users count as email-verified. Each old company became one shared workspace owned by the first Admin (else the first Project Owner). Every active user joined it with their old role mapped (ADMIN/PROJECT_OWNER → OWNER, RCA_LEAD → EDITOR, DEV/QA/PROD → CONTRIBUTOR with the same team, VIEWER → VIEWER). Every user also got a personal workspace. Existing bcrypt password hashes keep working.
 - **Down migration.** `down.sql` is best-effort. Workspace OWNER maps back to ADMIN. Names typed as free text are matched back to users by name, or left empty. Numbers that clash across workspaces are renumbered. A `pg_dump` taken before the upgrade is the real rollback.
 - **Demo data.** Demo data now lives in its own workspace, "Acme Payments (demo)", owned by Jogender Kota, and is seeded only with `NODE_ENV=development` and `SEED_DEMO=true`. The demo password is `Demo-Password-2026`. `admin@rca.local` is the demo platform operator with no workspace access. `npm run purge:demo -- --confirm` deletes every `@rca.local` user and everything they own.
+
+## Phase 2: authentication
+
+- **Tokens.** The access token is a 15-minute HS256 JWT carrying `sub` and `sid` (session id). The web app keeps it in memory only. Every request also checks that the session (refresh-token family) is still active, so logout and "log out of all devices" take effect immediately rather than when the token expires.
+- **Refresh tokens.** Refresh tokens are 256-bit random values stored as SHA-256 hashes, valid for 30 days, and rotated on every use. Presenting a token that has already been rotated is treated as theft and revokes the whole session.
+- **Cookies.** The refresh cookie `rca_rt` is httpOnly, SameSite=Lax, limited to Path=/api/v1/auth, and Secure in production (`COOKIE_SECURE`). CSRF uses a double-submit `rca_csrf` cookie plus an `X-CSRF-Token` header, and an Origin check, on the two cookie-authenticated endpoints (`/auth/refresh`, `/auth/logout`). All other endpoints use the bearer header, which browsers never attach on their own.
+- **No account enumeration.**
+  - Signup always returns 202 with the same message. A new address gets a verification link; an already-registered address gets an "account already exists" email instead. The password is hashed in both cases so the timing matches.
+  - Login answers 401 "Invalid email or password" for unknown and wrong alike, and runs a dummy argon2 check for unknown emails.
+  - Forgot-password and resend-verification always return 202.
+  - Emails are sent in the background so response time does not depend on them.
+- **Passwords.**
+  - Hashing is argon2id with m=19 MiB, t=2, p=1.
+  - A password must be 10–128 characters, must not be in a list of about 9,000 common passwords, must not be one repeated character, and must not be the email address or its local part.
+  - The common-password list is the 10+ character subset of the NCSC top-100k list (SecLists), shipped in `src/auth/data/`.
+  - Legacy bcrypt hashes from the internal tool are upgraded to argon2id on the next login.
+- **Rate limits.** Counters are in memory and per process:
+
+  | Endpoint | Limit |
+  |---|---|
+  | Login | 30 per IP and 10 per account, per 15 minutes |
+  | Signup | 10 per IP per hour |
+  | Forgot-password, resend-verification | 10 per IP and 3 per account, per hour |
+
+  All limits are configurable. Running more than one API instance needs sticky sessions or a shared store.
+- **Lockout.** After 10 wrong passwords an account is locked for 15 minutes, stored in the database so it survives restarts. During the lock even the correct password gets 429.
+- **Email verification and change.** Unverified users can log in and view data shared with them, but creating an RCA returns 403 `EMAIL_NOT_VERIFIED`. Changing the login email needs the current password; the change applies only after the link sent to the new address is used (24 h). No mail is sent when the new address is already taken, and the response is identical either way.
+- **Password reset.** A reset link (1 h, single use) signs out every session and also marks the email verified, since following it proves the user controls the inbox. Changing the password signs out every other device.
+- **Email.**
+  - The provider is chosen by `EMAIL_PROVIDER`: `console` (development only; refused in production), `smtp` (nodemailer) or `resend` (HTTP API).
+  - The console provider also appends each message as JSON to `MAIL_LOG_FILE`. The Playwright tests read verification and reset links from that file.
+  - An extra template, "account already exists", is needed for enumeration-safe signup. Email-change confirmation reuses the verify page.
+- **CAPTCHA.** Turnstile runs on signup and forgot-password only when `TURNSTILE_ENABLED=true`, and fails closed if Cloudflare cannot be reached. The site key reaches the web app at runtime via `GET /config/public`, so no rebuild is needed.
+- **Terms acceptance.** Signup requires `accept_terms: true`; no timestamp is stored for it.
+- **Delivered in Phase 6.** `DELETE /me` and `GET /me/export` are part of the account-lifecycle phase.
+- **Security events stored.** SIGNUP, LOGIN, LOGIN_FAILED, LOGOUT, LOGOUT_ALL, EMAIL_VERIFIED, PASSWORD_CHANGE, PASSWORD_RESET and EMAIL_CHANGE are written as `category = SECURITY` rows. They store the user agent but no IP address.

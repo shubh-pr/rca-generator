@@ -4,10 +4,12 @@ import { unauthorized } from '../lib/errors.js';
 import type { AuthUser } from '../policy/access.js';
 import { runWithScope, unscoped, type TenantScope } from '../tenancy/context.js';
 import { verifyAccessToken } from './jwt.js';
+import { isSessionActive } from './sessions.js';
 
 declare module 'express-serve-static-core' {
   interface Request {
     user?: AuthUser;
+    sessionId?: string;
   }
 }
 
@@ -43,6 +45,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!claims) throw unauthorized('Invalid or expired token');
   const user = await prisma.user.findUnique({ where: { id: claims.sub } });
   if (!user || !user.is_active || user.deleted_at) throw unauthorized('User is inactive or no longer exists');
+  // Logging out (or "log out of all devices") ends the session immediately, not when the token expires.
+  if (!(await isSessionActive(user.id, claims.sid))) throw unauthorized('Session ended. Please log in again.');
+  req.sessionId = claims.sid;
   req.user = {
     id: user.id,
     name: user.name,
@@ -58,4 +63,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 export function currentUser(req: Request): AuthUser {
   if (!req.user) throw unauthorized();
   return req.user;
+}
+
+export function currentSessionId(req: Request): string | undefined {
+  return req.sessionId;
 }

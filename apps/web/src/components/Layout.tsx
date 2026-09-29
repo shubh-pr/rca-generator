@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth';
 import { ROLE_LABEL } from '../lib/labels';
 import { auditWorkspaces } from '../lib/permissions';
 import { useWorkspace } from '../lib/workspace';
+import { ResendVerification } from '../pages/auth/SignupPage';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
   `block rounded px-3 py-2 text-sm ${isActive ? 'bg-white/15 font-semibold text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'}`;
@@ -68,8 +69,20 @@ export function Layout() {
         )}
       </aside>
       <main className="min-w-0 flex-1 p-6">
+        {user && !user.email_verified && <VerifyBanner email={user.email} />}
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+function VerifyBanner({ email }: { email: string }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="verify-banner">
+      <span>Verify your email ({email}) to create RCAs. Check your inbox for the link.</span>
+      <div className="w-56">
+        <ResendVerification email={email} />
+      </div>
     </div>
   );
 }

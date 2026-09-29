@@ -1,20 +1,28 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
 import { Field, TextInput } from '../components/Form';
 import { useAuth } from '../lib/auth';
 import { homeFor } from '../lib/permissions';
+import { AuthCard, Notice } from './auth/AuthCard';
+
+/** Only same-site paths are accepted as a post-login target. */
+export function safeNext(next: string | null): string | null {
+  return next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+}
 
 export function LoginPage() {
   const { user, login } = useAuth();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const next = safeNext(params.get('next'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to={homeFor(user)} replace />;
+  if (user) return <Navigate to={next ?? homeFor(user)} replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -23,7 +31,7 @@ export function LoginPage() {
     setFields({});
     try {
       const me = await login(email, password);
-      navigate(homeFor(me), { replace: true });
+      navigate(next ?? homeFor(me), { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -35,33 +43,34 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-label p-4">
-      <form onSubmit={onSubmit} className="card w-full max-w-sm space-y-4" noValidate>
-        <div>
-          <h1>RCA Admin Dashboard</h1>
-          <p className="text-slate-600">Sign in with your email and password.</p>
-        </div>
-        {error && (
-          <p className="rounded bg-red-50 px-3 py-2 text-red-700" role="alert">
-            {error}
-          </p>
-        )}
+    <AuthCard
+      title="Log in"
+      subtitle="Welcome back."
+      footer={
+        <>
+          New here?{' '}
+          <Link to={`/signup${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="font-semibold text-navy underline">
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {params.get('reset') && <Notice tone="success">Password changed. Log in with your new password.</Notice>}
+        {error && <Notice tone="error">{error}</Notice>}
         <Field label="Email" htmlFor="email" error={fields.email}>
           <TextInput id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field label="Password" htmlFor="password" error={fields.password}>
-          <TextInput
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <TextInput id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? 'Signing in…' : 'Log in'}
         </button>
+        <Link to="/forgot-password" className="block text-center text-sm text-navy underline">
+          Forgot your password?
+        </Link>
       </form>
-    </div>
+    </AuthCard>
   );
 }

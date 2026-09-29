@@ -21,23 +21,28 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.1",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "docx": "^9.8.0",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+    "nodemailer": "^10.0.12",
     "playwright": "^1.63.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.2.0",
     "@types/node": "^26.6.3",
+    "@types/nodemailer": "^8.0.2",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",

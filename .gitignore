@@ -9,3 +9,4 @@ apps/web/e2e/.downloads/
 *.log
 .DS_Store
 coverage/
+apps/web/e2e/.mail.log

@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { Team, WorkspaceRole } from '@prisma/client';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
-import { signAccessToken } from '../src/auth/jwt.js';
+import { createSession } from '../src/auth/sessions.js';
 import { hashPassword } from '../src/auth/password.js';
 import { prisma } from '../src/db.js';
 import { unscoped } from '../src/tenancy/context.js';
@@ -76,8 +76,8 @@ export async function createUser(name = 'User', opts: { verified?: boolean; emai
     const ws = await prisma.workspace.create({
       data: { name: `${name}'s workspace`, owner_id: user.id, is_personal: true, members: { create: { user_id: user.id, role: 'OWNER' } } },
     });
-    return { id: user.id, name, email, token: signAccessToken({ sub: user.id }), personalWorkspaceId: ws.id };
-  });
+    return { user, ws };
+  }).then(async ({ user, ws }) => ({ id: user.id, name, email, token: (await createSession(user.id, 'vitest')).accessToken, personalWorkspaceId: ws.id }));
 }
 
 export async function addMember(workspaceId: string, actor: Actor, role: WorkspaceRole, team: Team | null = null) {

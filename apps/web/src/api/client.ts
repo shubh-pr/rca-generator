@@ -1,4 +1,8 @@
-const TOKEN_KEY = 'rca.token';
+/**
+ * API client. The access token lives in memory only (never localStorage); the session survives reloads
+ * through the httpOnly refresh cookie, exchanged at /auth/refresh with the CSRF double-submit header.
+ */
+import type { Me } from './types';
 
 export class ApiError extends Error {
   constructor(
@@ -12,26 +16,47 @@ export class ApiError extends Error {
   }
 }
 
-export function getToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setToken(token: string | null) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // storage unavailable: the session lasts until reload
-  }
-}
-
+let accessToken: string | null = null;
 let onUnauthorized: () => void = () => {};
+let onSession: (user: Me) => void = () => {};
+
+export function setAccessToken(token: string | null) {
+  accessToken = token;
+}
 export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
+}
+export function setSessionHandler(fn: (user: Me) => void) {
+  onSession = fn;
+}
+
+function csrfToken(): string {
+  const m = /(?:^|;\s*)rca_csrf=([^;]+)/.exec(document.cookie);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+export const hasSessionCookie = () => csrfToken() !== '';
+
+let refreshing: Promise<Me | null> | null = null;
+
+/** Get a new access token from the refresh cookie. Single flight: parallel 401s share one refresh. */
+export function refreshSession(): Promise<Me | null> {
+  refreshing ??= (async () => {
+    try {
+      if (!hasSessionCookie()) return null;
+      const res = await fetch('/api/v1/auth/refresh', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken() }, credentials: 'same-origin' });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { access_token: string; user: Me };
+      accessToken = data.access_token;
+      onSession(data.user);
+      return data.user;
+    } catch {
+      return null;
+    } finally {
+      setTimeout(() => (refreshing = null), 0);
+    }
+  })();
+  return refreshing;
 }
 
 type Query = Record<string, string | number | boolean | undefined | null>;
@@ -46,18 +71,28 @@ export function buildQuery(q?: Query): string {
   return s ? `?${s}` : '';
 }
 
+/** fetch with the bearer token; on 401 refreshes once and retries. */
+async function authedFetch(url: string, init: RequestInit = {}, retry = true): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`);
+  const res = await fetch(url, { ...init, headers, credentials: 'same-origin' });
+  if (res.status === 401 && retry && !url.startsWith('/api/v1/auth/')) {
+    if (await refreshSession()) return authedFetch(url, init, false);
+    onUnauthorized();
+  }
+  return res;
+}
+
 async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
   const headers: Record<string, string> = {};
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
   let payload: BodyInit | undefined;
   if (body instanceof FormData) payload = body;
   else if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
     payload = JSON.stringify(body);
   }
-  const res = await fetch(`/api/v1${path}${buildQuery(query)}`, { method, headers, body: payload });
-  if (res.status === 401 && !path.startsWith('/auth/')) onUnauthorized();
+  if (path === '/auth/logout') headers['X-CSRF-Token'] = csrfToken();
+  const res = await authedFetch(`/api/v1${path}${buildQuery(query)}`, { method, headers, body: payload });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
@@ -77,10 +112,7 @@ export const api = {
 
 /** Download a binary endpoint with auth and save it with the server's file name. */
 export async function download(path: string, fallbackName: string, query?: Query) {
-  const token = getToken();
-  const res = await fetch(`/api/v1${path}${buildQuery(query)}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  const res = await authedFetch(`/api/v1${path}${buildQuery(query)}`);
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new ApiError(res.status, data.error ?? 'ERROR', data.message ?? 'Download failed');
@@ -100,8 +132,7 @@ export async function download(path: string, fallbackName: string, query?: Query
 
 /** Fetch text (e.g. the print HTML) with auth. */
 export async function fetchText(path: string): Promise<string> {
-  const token = getToken();
-  const res = await fetch(`/api/v1${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const res = await authedFetch(`/api/v1${path}`);
   if (!res.ok) throw new ApiError(res.status, 'ERROR', `Request failed (${res.status})`);
   return res.text();
 }
