@@ -62,6 +62,9 @@ export function Layout() {
               {user.name}
             </div>
             <div className="truncate">{user.email}</div>
+            <NavLink to="/settings" className="mt-2 block text-white underline">
+              Account settings
+            </NavLink>
             <button type="button" onClick={logout} className="mt-2 text-white underline">
               Log out
             </button>

@@ -94,7 +94,8 @@ export const STRONG_PASSWORD = 'Harbour-Lantern-Forty-2';
 export async function signUpAndVerify(browser: Browser, name: string, email: string, password = STRONG_PASSWORD): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
   page.on('dialog', (d) => d.accept());
-  await page.goto('/signup');
+  await page.goto('/');
+  await page.getByTestId('cta-signup').click();
   await page.fill('#name', name);
   await page.fill('#email', email);
   await page.fill('#password', password);

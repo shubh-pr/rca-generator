@@ -61,6 +61,7 @@ test('forgot password: reset through the emailed link, then log in with the new 
   const page = await browser.newPage();
   await page.goto('/login');
   await page.getByRole('link', { name: 'Forgot your password?' }).click();
+  await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();
   await page.fill('#email', email);
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByText('If an account exists for this email')).toBeVisible();

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router';
 import { Layout } from './components/Layout';
 import { useAuth } from './lib/auth';
-import { auditWorkspaces, homeFor } from './lib/permissions';
+import { auditWorkspaces } from './lib/permissions';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
@@ -10,6 +10,10 @@ import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { SignupPage } from './pages/auth/SignupPage';
 import { VerifyEmailPage } from './pages/auth/VerifyEmailPage';
 import { LoginPage } from './pages/LoginPage';
+import { ContactPage, PrivacyPage, TermsPage } from './pages/public/LegalPages';
+import { LandingPage } from './pages/public/LandingPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { WelcomePage } from './pages/WelcomePage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
 import { RcaListPage } from './pages/rca/RcaListPage';
@@ -22,6 +26,8 @@ function RequireAuth() {
   const location = useLocation();
   if (loading) return <div className="p-8 text-slate-500">Loading…</div>;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  // First login: the welcome screen, unless the user follows a direct link (e.g. an invitation).
+  if (!user.onboarded && location.pathname === '/dashboard') return <Navigate to="/welcome" replace />;
   return <Outlet />;
 }
 
@@ -37,15 +43,14 @@ function AuditOnly({ children }: { children: ReactNode }) {
   return auditWorkspaces(user).length ? children : <Navigate to="/" replace />;
 }
 
-function Home() {
-  const { user } = useAuth();
-  return <Navigate to={user ? homeFor(user) : '/login'} replace />;
-}
-
 export const router = createBrowserRouter([
   {
     element: <PublicShell />,
     children: [
+      { path: '/', element: <LandingPage /> },
+      { path: '/terms', element: <TermsPage /> },
+      { path: '/privacy', element: <PrivacyPage /> },
+      { path: '/contact', element: <ContactPage /> },
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/verify-email', element: <VerifyEmailPage /> },
@@ -60,7 +65,8 @@ export const router = createBrowserRouter([
       {
         element: <Layout />,
         children: [
-          { index: true, element: <Home /> },
+          { path: 'welcome', element: <WelcomePage /> },
+          { path: 'settings', element: <SettingsPage /> },
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'my-tasks', element: <MyTasksPage /> },
           { path: 'rcas', element: <RcaListPage /> },

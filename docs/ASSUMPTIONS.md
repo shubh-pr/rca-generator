@@ -148,3 +148,11 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 - **Terms acceptance.** Signup requires `accept_terms: true`; no timestamp is stored for it.
 - **Delivered in Phase 6.** `DELETE /me` and `GET /me/export` are part of the account-lifecycle phase.
 - **Security events stored.** SIGNUP, LOGIN, LOGIN_FAILED, LOGOUT, LOGOUT_ALL, EMAIL_VERIFIED, PASSWORD_CHANGE, PASSWORD_RESET and EMAIL_CHANGE are written as `category = SECURITY` rows. They store the user agent but no IP address.
+
+## Phase 3: onboarding and UX
+
+- **Welcome screen.** It appears once, the first time an un-onboarded user reaches the dashboard. "Create my first RCA" opens the new-RCA form, "Create a sample RCA" creates a complete, closed example, and "Skip for now" goes to the dashboard. Any of the three sets `users.onboarded_at`. Direct links such as invitations bypass the welcome screen.
+- **Sample RCA.** It is marked `is_sample` and shown as "Sample RCA" in the view and "Sample" in the list. It lives in the user's personal workspace with the user in every role, needs a verified email (it is an RCA), and is deleted like any other RCA.
+- **Legal and contact pages.** Terms, Privacy and Contact are structured drafts written with GDPR and the India DPDP Act 2023 in mind. Every legal detail is a highlighted `[REPLACE BEFORE LAUNCH: …]` marker that must be filled before going public.
+- **Cookie notice.** No cookie banner is shown, because only essential sign-in cookies are used (`rca_rt` and `rca_csrf`) and there is no analytics or advertising. The site footer says so.
+- **Landing page.** It uses dashed placeholder boxes instead of real screenshots.

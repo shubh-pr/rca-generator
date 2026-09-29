@@ -197,3 +197,26 @@ describe('timeline', () => {
     expect((await api().get(url).set(bearer(a.VIEWER))).body.data.map((e: { event: string }) => e.event)).toEqual(['Alerts fired (5xx)']);
   });
 });
+
+describe('onboarding sample RCA', () => {
+  it('creates a labelled, complete, closed example in the personal workspace that the user can delete', async () => {
+    const u = await createUser('Newbie');
+    const res = await api().post('/api/v1/rcas/sample').set(bearer(u)).send({});
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ is_sample: true, status: 'CLOSED', workspace_id: u.personalWorkspaceId, rca_number: 'RCA-2026-0001' });
+    expect(res.body.sections.every((s: { section_status: string }) => s.section_status === 'SUBMITTED')).toBe(true);
+    expect(res.body.signoffs.every((s: { user_id: string }) => s.user_id === u.id)).toBe(true);
+    const list = await api().get('/api/v1/rcas').set(bearer(u));
+    expect(list.body.data[0].is_sample).toBe(true);
+    expect((await api().delete(`/api/v1/rcas/${res.body.id}`).set(bearer(u))).status).toBe(204);
+    // Other users never see it.
+    expect((await api().get(`/api/v1/rcas/${res.body.id}`).set(bearer(a.OUTSIDER))).status).toBe(404);
+  });
+
+  it('needs a verified email; marking onboarding done is recorded', async () => {
+    const u = await createUser('Unverified', { verified: false });
+    expect((await api().post('/api/v1/rcas/sample').set(bearer(u)).send({})).body.error).toBe('EMAIL_NOT_VERIFIED');
+    expect((await api().get('/api/v1/me').set(bearer(u))).body.onboarded).toBe(false);
+    expect((await api().post('/api/v1/me/onboarded').set(bearer(u)).send({})).body.onboarded).toBe(true);
+  });
+});

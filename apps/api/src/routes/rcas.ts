@@ -13,6 +13,8 @@ import { createRcaRecord } from '../services/rcaCreate.js';
 import { loadFullRca, overdueActionWhere, serializeRca } from '../services/rcaQueries.js';
 import { checkIncidentTimes } from '../services/rcaRules.js';
 import { loadRcaAccess } from '../policy/access.js';
+import { createClosedSample } from '../services/sampleData.js';
+import { unscoped } from '../tenancy/context.js';
 import { rcaEditableFields } from './rca/fields.js';
 
 export const rcasRouter = Router();
@@ -81,3 +83,21 @@ rcasRouter.post('/rcas', async (req, res) => {
   res.status(201).json(serializeRca(await loadFullRca(prisma, id), ctx));
 });
 
+
+/**
+ * Onboarding: a clearly labelled, complete example RCA (is_sample) in the user's personal workspace.
+ * Every person in it is the user. It can be deleted like any other RCA.
+ */
+rcasRouter.post('/rcas/sample', async (req, res) => {
+  const me = currentUser(req);
+  if (!me.email_verified_at) throw emailNotVerified();
+  const workspaceId = await defaultWorkspaceId(me.id);
+  if (!canInWorkspace(await workspaceRole(prisma, me.id, workspaceId), 'rca.create')) throw forbidden();
+  // Ownership was checked above; the rows are created in one transaction outside the scope filter,
+  // because child rows of an uncommitted RCA are not visible to the filter's parent check.
+  const id = await unscoped('create onboarding sample in the user\'s own workspace', () =>
+    prisma.$transaction(async (tx) => (await createClosedSample(tx, workspaceId, { owner: me, lead: me, DEV: me, QA: me, PROD: me }, { isSample: true })).id),
+  );
+  const { ctx } = await loadRcaAccess(prisma, me, id);
+  res.status(201).json(serializeRca(await loadFullRca(prisma, id), ctx));
+});

@@ -223,6 +223,13 @@ authRouter.post('/auth/reset-password', async (req, res) => {
 export const accountRouter = Router();
 accountRouter.use(['/auth/change-password', '/auth/logout-all', '/auth/sessions', '/me'], requireAuth);
 
+/** First-login welcome screen was answered (or skipped). */
+accountRouter.post('/me/onboarded', async (req, res) => {
+  const me = currentUser(req);
+  await users(() => prisma.user.update({ where: { id: me.id }, data: { onboarded_at: new Date() } }));
+  res.json(await meView(me.id));
+});
+
 accountRouter.post('/auth/change-password', async (req, res) => {
   const me = currentUser(req);
   const body = parse(z.object({ current_password: zPassword, new_password: zPassword }), req.body);
