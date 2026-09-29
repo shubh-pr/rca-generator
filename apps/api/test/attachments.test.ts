@@ -19,7 +19,8 @@ describe('attachments', () => {
     expect(res.body).toMatchObject({ kind: 'FILE', file_name: 'server.log', mime: 'text/plain', size: 14, description: 'Error log' });
     expect(res.body.file_path).toBeUndefined();
     const row = await raw(() => db.rcaAttachment.findUniqueOrThrow({ where: { id: res.body.id } }));
-    expect(row.file_path).toMatch(/^[0-9a-f-]{36}\.log$/);
+    expect(row.file_path).toMatch(/^ws\/[0-9a-f-]{36}\/rca\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.log$/);
+    expect(row.file_path).not.toContain('server');
     const dl = await api().get(u(`/${res.body.id}/download`)).set(bearer(a.VIEWER));
     expect(dl.status).toBe(200);
     expect(dl.headers['content-disposition']).toContain('attachment');

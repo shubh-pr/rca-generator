@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { purgeDemoData } from '../scripts/purge-demo-data.js';
-import { DEMO_DOMAIN } from '../prisma/seed.js';
+import { DEMO_DOMAIN } from '../prisma/demo.js';
 import { createClosedSample } from '../src/services/sampleData.js';
 import { addMember, createRca, createUser, db, raw, resetDb, type Actor } from './helpers.js';
 

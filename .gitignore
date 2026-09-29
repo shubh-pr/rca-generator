@@ -10,3 +10,4 @@ apps/web/e2e/.downloads/
 .DS_Store
 coverage/
 apps/web/e2e/.mail.log
+.env.prod

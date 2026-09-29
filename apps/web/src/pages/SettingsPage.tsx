@@ -12,6 +12,7 @@ export function SettingsPage() {
     <div className="max-w-3xl space-y-6">
       <h1>Account settings</h1>
       <Profile />
+      <Usage />
       <ChangePassword />
       <Sessions />
       <AccountLifecycle />
@@ -65,6 +66,44 @@ function Profile() {
           </button>
         </div>
       </form>
+    </section>
+  );
+}
+
+interface UsageReport {
+  storage_bytes_used: number;
+  storage_limit_bytes: number;
+  rca_count: number;
+  rca_limit: number;
+}
+
+function Usage() {
+  const q = useQuery({ queryKey: ['usage'], queryFn: () => api.get<UsageReport>('/me/usage') });
+  if (!q.data) return null;
+  const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+  const bar = (used: number, limit: number) => (
+    <div className="h-2 w-full rounded bg-slate-200" role="presentation">
+      <div className="h-2 rounded bg-navy" style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} />
+    </div>
+  );
+  return (
+    <section className="card space-y-3" data-testid="usage">
+      <h2>Usage</h2>
+      <p className="text-xs text-slate-500">Counts RCAs and files in the workspaces you own.</p>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div>
+          <div className="mb-1 text-sm">
+            RCAs: <strong>{q.data.rca_count}</strong> of {q.data.rca_limit}
+          </div>
+          {bar(q.data.rca_count, q.data.rca_limit)}
+        </div>
+        <div>
+          <div className="mb-1 text-sm">
+            Attachments: <strong>{mb(q.data.storage_bytes_used)}</strong> of {mb(q.data.storage_limit_bytes)}
+          </div>
+          {bar(q.data.storage_bytes_used, q.data.storage_limit_bytes)}
+        </div>
+      </div>
     </section>
   );
 }

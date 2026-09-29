@@ -5,7 +5,7 @@ import { ErrorBanner, TextInput } from '../../components/Form';
 import { formatDateTime } from '../../lib/dates';
 import { useRcaMutation } from './rcaApi';
 
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024; // the server enforces MAX_UPLOAD_MB and the storage quota
 const ALLOWED = ['.pdf', '.png', '.jpg', '.jpeg', '.txt', '.log', '.csv', '.xlsx', '.docx', '.zip'];
 
 function formatSize(n: number | null) {

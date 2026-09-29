@@ -53,6 +53,11 @@ export function Layout() {
           <NavLink to="/workspaces" className={linkClass}>
             Workspaces
           </NavLink>
+          {user?.is_platform_admin && (
+            <NavLink to="/admin" className={linkClass}>
+              Operator console
+            </NavLink>
+          )}
           {auditWorkspaces(user).length > 0 && (
             <NavLink to="/audit" className={linkClass}>
               Audit log

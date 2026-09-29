@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import fs from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
@@ -9,40 +9,25 @@ import { config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { rcaAudit, writeAudit } from '../../lib/audit.js';
 import { badRequest, notFound } from '../../lib/errors.js';
+import { logger } from '../../lib/logger.js';
 import { parse, zText, zUuid } from '../../lib/validate.js';
 import { authorize } from '../../policy/policy.js';
+import { withinQuota } from '../../services/quota.js';
 import { userRef } from '../../services/rcaQueries.js';
 import { ensureRcaEditable } from '../../services/rcaRules.js';
+import { ALLOWED_TYPES, contentMatches } from '../../storage/fileType.js';
+import { storage } from '../../storage/index.js';
 import { rcaOf } from './access.js';
 
 export const attachmentsRouter = Router({ mergeParams: true });
 
-/** SPEC 8: allowed types. The served Content-Type comes from this table, never from the client. */
-export const ALLOWED_TYPES: Record<string, string> = {
-  '.pdf': 'application/pdf',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.txt': 'text/plain',
-  '.log': 'text/plain',
-  '.csv': 'text/csv',
-  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  '.zip': 'application/zip',
-};
-
 class FileTypeError extends Error {}
 
+// Files are held in memory (at most MAX_UPLOAD_MB) so type, content and quota are checked before
+// anything is written to storage.
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      fs.mkdirSync(config.uploadDir, { recursive: true });
-      cb(null, config.uploadDir);
-    },
-    // Random storage name; the original name is only kept in the database.
-    filename: (_req, file, cb) => cb(null, `${randomUUID()}${path.extname(file.originalname).toLowerCase()}`),
-  }),
-  limits: { fileSize: config.maxUploadBytes, files: 1 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.maxUploadBytes, files: 1, fields: 5 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (ALLOWED_TYPES[ext]) cb(null, true);
@@ -89,6 +74,13 @@ const publicFields = {
   uploader: userRef,
 } as const;
 
+/** Display name only: no paths, no control characters. */
+const safeName = (name: string) =>
+  [...path.basename(name)]
+    .map((ch) => (ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127 || ch === '"' || ch === '\\' ? '_' : ch))
+    .join('')
+    .slice(0, 255) || 'attachment';
+
 attachmentsRouter.get('/attachments', async (req, res) => {
   const { rca, ctx } = rcaOf(req);
   authorize(ctx, 'rca.view');
@@ -102,54 +94,68 @@ attachmentsRouter.post('/attachments', async (req, res) => {
   authorize(ctx, 'attachment.add');
   ensureRcaEditable(rca);
 
-  let data;
-  if (req.is('multipart/form-data')) {
-    await runUpload(req, res);
-    const file = req.file;
-    if (!file) throw badRequest({ file: 'Choose a file to upload' });
-    const ext = path.extname(file.originalname).toLowerCase();
-    let description: string | null = null;
-    try {
-      description = parse(z.object({ description: zText(255).optional() }), req.body).description ?? null;
-    } catch (e) {
-      fs.rmSync(file.path, { force: true });
-      throw e;
-    }
-    data = {
-      kind: 'FILE',
-      description,
-      file_path: path.basename(file.path),
-      file_name: file.originalname.slice(0, 255),
-      mime: ALLOWED_TYPES[ext],
-      size: file.size,
-    };
-  } else {
+  if (!req.is('multipart/form-data')) {
     const body = parse(linkSchema, req.body);
-    data = { kind: 'LINK', url: body.url, description: body.description ?? null };
+    const data = { kind: 'LINK', url: body.url, description: body.description ?? null };
+    const created = await prisma.$transaction(async (tx) => {
+      const row = await tx.rcaAttachment.create({ data: { ...data, rca_id: rca.id, uploaded_by: me.id }, select: publicFields });
+      await writeAudit(tx, rcaAudit(rca, { entity: 'rca_attachment', entity_id: row.id, action: 'CREATE', new_value: data, user_id: me.id }));
+      return row;
+    });
+    res.status(201).json(created);
+    return;
   }
 
-  const created = await prisma.$transaction(async (tx) => {
-    const row = await tx.rcaAttachment.create({ data: { ...data, rca_id: rca.id, uploaded_by: me.id }, select: publicFields });
-    await writeAudit(tx, rcaAudit(rca, { entity: 'rca_attachment', entity_id: row.id, action: 'CREATE', new_value: { ...data, file_path: undefined }, user_id: me.id }));
-    return row;
-  });
+  await runUpload(req, res);
+  const file = req.file;
+  if (!file) throw badRequest({ file: 'Choose a file to upload' });
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!contentMatches(ext, file.buffer)) throw badRequest({ file: `The file content does not match the ${ext} type` });
+  const { description } = parse(z.object({ description: zText(255).optional() }), req.body);
+  const key = `ws/${rca.workspace_id}/rca/${rca.id}/${randomUUID()}${ext}`;
+  const data = {
+    kind: 'FILE',
+    description: description ?? null,
+    file_path: key,
+    file_name: safeName(file.originalname),
+    mime: ALLOWED_TYPES[ext],
+    size: file.size,
+  };
+  await storage().put(key, file.buffer, ALLOWED_TYPES[ext]);
+  let created;
+  try {
+    created = await withinQuota(rca.workspace_id, { bytes: file.size }, async (tx) => {
+      const row = await tx.rcaAttachment.create({ data: { ...data, rca_id: rca.id, uploaded_by: me.id }, select: publicFields });
+      await writeAudit(tx, rcaAudit(rca, { entity: 'rca_attachment', entity_id: row.id, action: 'CREATE', new_value: { ...data, file_path: undefined }, user_id: me.id }));
+      return row;
+    });
+  } catch (err) {
+    // Over quota or failed insert: the stored object is removed again.
+    await storage().delete(key).catch(() => {});
+    throw err;
+  }
   res.status(201).json(created);
 });
 
+/** Authenticated download, streamed from storage; always an attachment, never rendered inline. */
 attachmentsRouter.get('/attachments/:aid/download', async (req, res) => {
   const { rca, ctx } = rcaOf(req);
   authorize(ctx, 'rca.view');
   const att = await prisma.rcaAttachment.findFirst({ where: { id: aidParam(req), rca_id: rca.id } });
   if (!att) throw notFound('Attachment not found');
   if (att.kind !== 'FILE' || !att.file_path) throw notFound('This attachment is a link, not a file');
-  const full = path.join(config.uploadDir, path.basename(att.file_path));
-  if (!fs.existsSync(full)) throw notFound('File is missing from storage');
-  // Always a download, never rendered or executed in the browser.
+  let body;
+  try {
+    body = await storage().get(att.file_path);
+  } catch {
+    throw notFound('File is missing from storage');
+  }
   res.setHeader('Content-Type', att.mime ?? 'application/octet-stream');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'none'");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+  res.setHeader('Cache-Control', 'private, no-store');
   res.attachment(att.file_name ?? 'attachment');
-  fs.createReadStream(full).pipe(res);
+  await pipeline(body, res);
 });
 
 attachmentsRouter.delete('/attachments/:aid', async (req, res) => {
@@ -169,6 +175,6 @@ attachmentsRouter.delete('/attachments/:aid', async (req, res) => {
       user_id: me.id,
     }));
   });
-  if (att.file_path) fs.rmSync(path.join(config.uploadDir, path.basename(att.file_path)), { force: true });
+  if (att.file_path) await storage().delete(att.file_path).catch((err) => logger.warn('storage delete failed', { error: String(err) }));
   res.status(204).end();
 });

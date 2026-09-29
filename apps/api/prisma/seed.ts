@@ -9,8 +9,7 @@ import { disconnectDb, prisma } from '../src/db.js';
 import { createClosedSample, createDraftSample } from '../src/services/sampleData.js';
 import { unscoped } from '../src/tenancy/context.js';
 
-export const DEMO_DOMAIN = '@rca.local';
-export const DEMO_PASSWORD = 'Demo-Password-2026';
+import { DEMO_DOMAIN, DEMO_PASSWORD } from './demo.js';
 
 interface DemoUser {
   key: 'owner' | 'lead' | 'DEV' | 'QA' | 'PROD' | 'viewer' | 'admin';

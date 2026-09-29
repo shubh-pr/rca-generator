@@ -16,7 +16,8 @@ their own section of an RCA, and any RCA can be printed or exported as PDF/DOCX.
 | Web      | React 19, TypeScript, Vite 8, Tailwind CSS 4, React Router 8 (data router), TanStack Query 5 |
 | Export   | Playwright Chromium (PDF from the `/print` HTML), `docx` (Word), `exceljs` (xlsx) |
 | Tests    | Vitest + supertest (API), Vitest (web unit), Playwright (end-to-end) |
-| Run      | `docker-compose.yml`: `db` (postgres), `api`, `web` (nginx serving the build, proxying `/api`) |
+| Run      | `docker-compose.yml` (local: db, api, web) and `docker-compose.prod.yml` (Caddy with auto HTTPS, api, db, backup) |
+| Storage  | `src/storage/`: S3-compatible (production) or local disk (development) |
 
 ## Folder structure
 
@@ -45,7 +46,10 @@ apps/web/                 React app (npm workspace "@rca/web")
   src/pages/              One file per screen
   src/lib/                Labels, date helpers (IST display), permissions mirror
   e2e/                    Playwright end-to-end tests
-docs/                     Spec, assumptions, plan
+apps/web/Caddyfile        Static files, /api proxy, security headers, automatic HTTPS
+ops/backup/               pg_dump backup/restore image; ops/seccomp/chromium.json: Chromium sandbox profile
+.github/workflows/ci.yml  Lint, tests (incl. isolation + S3), e2e, image builds
+docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, ASSUMPTIONS.md, DEPLOY.md
 ```
 
 ## Naming conventions
@@ -81,7 +85,10 @@ npm run dev                          # api on :4000, web on :5173 (proxies /api)
 npm run lint                         # eslint + tsc --noEmit for both apps
 npm test                             # API tests on rca_test (created/migrated automatically) + web unit tests
 npm run test:e2e                     # Playwright: re-seeds rca_e2e, starts api :4100 + web :5174 itself
-docker compose up --build            # whole stack: http://localhost:8080
+docker compose up --build            # local stack with demo data: http://localhost:8080
+S3_TEST_ENDPOINT=http://localhost:9100 npm test   # also runs the S3 driver test (docker run -p 9100:9090 -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS=rca-test adobe/s3mock)
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build   # production (docs/DEPLOY.md)
+npm run admin:promote -w @rca/api -- you@example.com  # platform operator flag
 ```
 
 New migration during development: `npm run db:migrate:dev -- --name <name>` (runs `prisma migrate dev`).
@@ -95,4 +102,6 @@ New migration during development: `npm run db:migrate:dev -- --name <name>` (run
 - `/rcas/export` must stay registered before `/rcas/:id` routes (see `src/app.ts`).
 - The print HTML (`src/export/printHtml.ts`) and DOCX (`src/export/docx.ts`) both render
   `src/export/model.ts`; change the template order there, not in each renderer.
-- Docker Desktop on macOS cannot bind-mount from ~/Documents here, so compose uses named volumes only.
+- Docker Desktop on macOS cannot bind-mount from ~/Documents here, so the local compose uses named volumes only.
+- Never log personal data or tokens; use `logger` from `src/lib/logger.ts`, not console.
+- Quota-limited writes go through `withinQuota(workspaceId, add, (tx) => …)` and must write through `tx`.

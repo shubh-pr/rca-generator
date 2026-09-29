@@ -3,7 +3,7 @@
  * (RCAs, sections, files, audit rows) and their memberships. Prints what it will delete and only
  * deletes with --confirm:   npm run purge:demo -- --confirm
  */
-import { DEMO_DOMAIN } from '../prisma/seed.js';
+import { DEMO_DOMAIN } from '../prisma/demo.js';
 import { disconnectDb, prisma } from '../src/db.js';
 import { purgeWorkspace, removeStoredFiles } from '../src/services/purge.js';
 import { unscoped } from '../src/tenancy/context.js';

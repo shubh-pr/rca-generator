@@ -1,0 +1,40 @@
+# SITE_ADDRESS: ":80" for plain HTTP (local), or your domain (e.g. "rca.example.com") for automatic HTTPS.
+{
+	email {$ACME_EMAIL:admin@localhost}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$SITE_ADDRESS::80} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Content-Security-Policy "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	# The API; /healthz, /readyz and /internal/* stay private to the container network.
+	handle /api/* {
+		request_body {
+			max_size 12MB
+		}
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle {
+		root * /srv
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { currentUser } from '../../auth/index.js';
+import { config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { rcaAudit, writeAudit } from '../../lib/audit.js';
 import { parse } from '../../lib/validate.js';
@@ -35,7 +36,9 @@ rcaExportsRouter.get('/export', async (req, res) => {
   const { format } = parse(z.object({ format: z.enum(['pdf', 'docx']) }), { format: req.query.format });
   const rca = await loadFullRca(prisma, row.id);
   const model = buildExportModel(rca);
-  const buf = format === 'pdf' ? await renderPdf(renderPrintHtml(model)) : await renderDocx(model);
+  // Chromium fetches the one-time print page from this same process over loopback.
+  const baseUrl = config.pdf.internalBaseUrlOverride ?? `http://127.0.0.1:${req.socket.localPort}`;
+  const buf = format === 'pdf' ? await renderPdf(renderPrintHtml(model), baseUrl) : await renderDocx(model);
   await writeAudit(prisma, rcaAudit(rca, { entity: 'rca', entity_id: rca.id, action: 'EXPORT', new_value: { format, version: rca.version }, user_id: me.id }));
   res.attachment(exportFileName(model, format)).type(format === 'pdf' ? 'application/pdf' : DOCX).send(buf);
 });

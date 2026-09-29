@@ -238,7 +238,7 @@ model Invitation {
   rca       Rca?       @relation(fields: [rca_id], references: [id], onDelete: Cascade)
   inviter   User?      @relation("InvitedBy", fields: [invited_by], references: [id], onDelete: SetNull)
 
-  @@index([email])
+  @@index([email, accepted_at, revoked_at])
   @@index([workspace_id])
   @@index([rca_id])
   @@map("invitations")
@@ -257,6 +257,7 @@ model EmailToken {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, type])
+  @@index([expires_at])
   @@map("email_tokens")
 }
 
@@ -277,6 +278,7 @@ model RefreshToken {
 
   @@index([user_id])
   @@index([family_id])
+  @@index([expires_at])
   @@map("refresh_tokens")
 }
 
@@ -307,6 +309,7 @@ model SupportGrant {
   workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
 
   @@index([admin_user_id, expires_at])
+  @@index([workspace_id])
   @@map("support_grants")
 }
 
@@ -513,6 +516,7 @@ model RcaAttachment {
   uploader User? @relation(fields: [uploaded_by], references: [id], onDelete: SetNull)
 
   @@index([rca_id])
+  @@index([uploaded_by])
   @@map("rca_attachment")
 }
 
@@ -534,6 +538,7 @@ model RcaSignoff {
   assignee User? @relation("SignoffAssignee", fields: [assignee_user_id], references: [id], onDelete: SetNull)
 
   @@unique([rca_id, role])
+  @@index([assignee_user_id])
   @@map("rca_signoff")
 }
 
@@ -558,6 +563,7 @@ model AuditLog {
 
   @@index([workspace_id, at])
   @@index([category, user_id, at])
+  @@index([user_id])
   @@index([rca_id, at])
   @@index([user_id, at])
   @@index([at])

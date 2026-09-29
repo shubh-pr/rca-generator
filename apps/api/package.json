@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && cp -R src/auth/data dist/src/auth/",
     "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate deploy",
@@ -15,12 +15,14 @@
     "postinstall": "prisma generate",
     "e2e:prepare": "tsx scripts/prepareE2eDb.ts",
     "e2e:serve": "npm run e2e:prepare && tsx src/server.ts",
-    "purge:demo": "tsx scripts/purge-demo-data.ts"
+    "purge:demo": "tsx scripts/purge-demo-data.ts",
+    "admin:promote": "tsx scripts/promote-admin.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1142.0",
     "@node-rs/argon2": "^2.2.1",
     "@prisma/client": "^6.19.3",
     "bcryptjs": "^3.0.3",
@@ -29,11 +31,13 @@
     "docx": "^9.8.0",
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "nodemailer": "^10.0.12",
     "playwright": "^1.63.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "prisma": "^6.19.3"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -49,7 +53,6 @@
     "jszip": "^3.10.2",
     "pdf-parse": "^1.1.4",
     "pg": "^8.23.0",
-    "prisma": "^6.19.3",
     "supertest": "^7.3.0",
     "tsx": "^4.23.15",
     "typescript": "~5.9",

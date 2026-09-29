@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger.js';
 import { createEmailProvider, type EmailMessage, type EmailProvider } from './provider.js';
 
 export { templates } from './templates.js';
@@ -23,7 +24,7 @@ export function sendEmail(to: string, template: string, rendered: { subject: str
   const message: EmailMessage = { to, template, ...rendered };
   const p = provider
     .send(message)
-    .catch((err) => console.error(JSON.stringify({ level: 'error', msg: 'email send failed', template, error: String(err) })))
+    .catch((err) => logger.error('email send failed', { template, error: String(err) }))
     .finally(() => pending.delete(p));
   pending.add(p);
 }

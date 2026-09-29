@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { ErrorRequestHandler } from 'express';
 import multer from 'multer';
 import { HttpError } from './errors.js';
+import { logger } from './logger.js';
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof HttpError) {
@@ -41,6 +42,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       return;
     }
   }
-  console.error(err);
+  // Full details go to the log only; clients never see stack traces.
+  logger.error('unhandled error', { error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined, path: _req.path, method: _req.method });
   res.status(500).json({ error: 'INTERNAL', message: 'Unexpected server error' });
 };

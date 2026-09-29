@@ -1,7 +1,6 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { config } from '../config.js';
 import type { Tx } from '../db.js';
+import { logger } from '../lib/logger.js';
+import { storage } from '../storage/index.js';
 
 /**
  * Hard-delete a workspace and everything in it, including its audit rows and stored files.
@@ -21,5 +20,9 @@ export async function purgeWorkspace(tx: Tx, workspaceId: string): Promise<{ rca
 
 /** Remove stored files after the database transaction committed. */
 export async function removeStoredFiles(keys: string[]) {
-  for (const key of keys) fs.rmSync(path.join(config.uploadDir, path.basename(key)), { force: true });
+  for (const key of keys) {
+    await storage()
+      .delete(key)
+      .catch((err) => logger.warn('storage delete failed during purge', { error: String(err) }));
+  }
 }

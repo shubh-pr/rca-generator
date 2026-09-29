@@ -15,6 +15,7 @@ import { LandingPage } from './pages/public/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WelcomePage } from './pages/WelcomePage';
 import { InvitePage } from './pages/InvitePage';
+import { AdminPage } from './pages/AdminPage';
 import { WorkspaceDetailPage, WorkspacesPage } from './pages/WorkspacesPage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
           { path: 'welcome', element: <WelcomePage /> },
           { path: 'settings', element: <SettingsPage /> },
           { path: 'workspaces', element: <WorkspacesPage /> },
+          { path: 'admin', element: <AdminPage /> },
           { path: 'workspaces/:wid', element: <WorkspaceDetailPage /> },
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'my-tasks', element: <MyTasksPage /> },

@@ -167,7 +167,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     uploadDir: path.resolve(e.UPLOAD_DIR),
     maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
     quota: { storageBytes: e.QUOTA_STORAGE_MB * 1024 * 1024, rcaCount: e.QUOTA_RCA_COUNT },
-    pdf: { timeoutMs: e.PDF_TIMEOUT_MS, concurrency: e.PDF_CONCURRENCY, chromiumSandbox: e.PDF_CHROMIUM_SANDBOX, internalBaseUrl: e.INTERNAL_BASE_URL ?? `http://127.0.0.1:${e.PORT}` },
+    pdf: { timeoutMs: e.PDF_TIMEOUT_MS, concurrency: e.PDF_CONCURRENCY, chromiumSandbox: e.PDF_CHROMIUM_SANDBOX, internalBaseUrlOverride: e.INTERNAL_BASE_URL },
     accountDeletionGraceMs: e.ACCOUNT_DELETION_GRACE_DAYS * 86_400_000,
     jobs: { enabled: e.JOBS_ENABLED, intervalMs: e.JOBS_INTERVAL_MINUTES * 60_000 },
     google: { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET },

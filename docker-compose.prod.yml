@@ -1,0 +1,102 @@
+# Production stack: Caddy (HTTPS + static app) -> api -> postgres, plus nightly backups.
+#   cp .env.prod.example .env.prod   # fill in every value
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+# See docs/DEPLOY.md.
+name: rca-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-rca}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [backend]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    env_file: .env.prod
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-rca}
+      TRUST_PROXY: "1"
+      SEED_DEMO: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /home/pwuser
+    security_opt:
+      - no-new-privileges:true
+      # Lets Chromium use its own sandbox as the unprivileged pwuser (profile from the Playwright project).
+      - seccomp=./ops/seccomp/chromium.json
+    ipc: private
+    networks: [backend, frontend]
+
+  caddy:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS to your domain}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [frontend]
+
+  backup:
+    build:
+      context: .
+      dockerfile: ops/backup/Dockerfile
+    restart: unless-stopped
+    environment:
+      PGHOST: db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-rca}
+      BACKUP_SCHEDULE: ${BACKUP_SCHEDULE:-30 2 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-14}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-auto}
+    volumes:
+      - backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [backend]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  backups:
+
+networks:
+  backend:
+    internal: true
+  frontend:
