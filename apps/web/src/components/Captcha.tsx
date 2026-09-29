@@ -11,6 +11,7 @@ declare global {
 export interface PublicConfig {
   turnstile_site_key: string | null;
   google_enabled: boolean;
+  microsoft_enabled: boolean;
   password_min_length: number;
 }
 

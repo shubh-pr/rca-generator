@@ -6,6 +6,7 @@ import { ErrorBanner, Field, TextInput } from '../components/Form';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/dates';
 import { AccountLifecycle } from './settings/AccountLifecycle';
+import { ConnectedAccounts } from './settings/ConnectedAccounts';
 import { SettingsTabs } from './settings/SettingsTabs';
 
 export function SettingsPage() {
@@ -16,6 +17,7 @@ export function SettingsPage() {
       <Profile />
       <Usage />
       <ChangePassword />
+      <ConnectedAccounts />
       <Sessions />
       <AccountLifecycle />
     </div>
