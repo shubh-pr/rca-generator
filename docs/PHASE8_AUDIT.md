@@ -14,7 +14,7 @@ Scope: branch `phase-8-billing` (PR #1). Every item has evidence: a `file:line` 
 | 3 | Full flow, automated in the browser | **PASS** (6/6 new journeys, 17/17 overall) |
 | 4 | Workspace quota | **PASS** (1 documented exception) |
 | 5 | GitHub token scope | **Rotation recommended** (not a merge blocker) |
-| 6 | CI on the PR merge commit | See section 6 |
+| 6 | CI on the PR merge commit | **PASS** (after 1 CI-only failure was fixed) |
 
 ---
 
@@ -283,10 +283,46 @@ This was checked without printing the token. The credential was read through `gi
 
 The workflow triggers are `push` to `main` and `pull_request` (`.github/workflows/ci.yml:3-6`). There are no push runs for feature branches, so every run of this branch is a `pull_request` run. GitHub runs that event on the PR's merge commit (`refs/pull/1/merge`).
 
-_Filled in after the audit commit's CI run completes; see below._
+**Correction to an earlier report:** the run given before (36544456096) was already a `pull_request` run on the merge commit. There never was a separate "branch run", because the workflow does not run on pushes to feature branches.
+
+### First audit push: FAIL (fixed)
+
+Run https://github.com/shubh-pr/rca-generator/actions/runs/36554438514 (commit `1855cf0`):
+- job `test` passed;
+- job `images` failed: `e2e/billingAudit.spec.ts(6,19): error TS2307: Cannot find module 'jszip'`.
+
+The new browser spec imports `jszip`, which was declared only by `@rca/api`. Locally, npm hoists it; the web Docker image installs only `@rca/web`'s dependencies (`apps/web/Dockerfile:8`).
+
+**Fix:** commit `5264b76` declares `jszip` as a web devDependency, with a one-line lockfile change. The web image build was reproduced locally before pushing (`docker build -f apps/web/Dockerfile .`).
+
+### Current head: PASS
+
+- **Run:** https://github.com/shubh-pr/rca-generator/actions/runs/36555548363 (event `pull_request`, head `5264b76`, conclusion **success**).
+  - job `test` success: https://github.com/shubh-pr/rca-generator/actions/runs/36555548363/job/109363698788
+  - job `images` success: https://github.com/shubh-pr/rca-generator/actions/runs/36555548363/job/109365522562
+- **It ran on the merge commit.** From the `test` job's checkout step:
+
+  ```
+  git fetch ... origin +6f6e651e401645ab10667c9099cfeae09ba858dd:refs/remotes/pull/1/merge
+  git checkout --progress --force refs/remotes/pull/1/merge
+  ```
+
+  `6f6e651` is the PR's `merge_commit_sha` from `GET /repos/shubh-pr/rca-generator/pulls/1`, which also reports `mergeable_state: clean`.
+- **Test counts in that run:**
+  - API: 22 files, **242 passed**, 0 skipped (CI runs the S3 tests that are skipped locally), including `billingAudit.test.ts (11 tests)`;
+  - web unit: 5 passed;
+  - tenant-isolation step: 54 passed;
+  - Playwright: **17 passed**, including all 6 `billingAudit.spec.ts` journeys.
+
+This file was committed after that run, so its own commit triggers one more run. It changes documentation only.
 
 ---
 
 ## Overall verdict
 
-_See the end of section 6._
+**Safe to merge.** Every check passes, the one bug found (1.4) is fixed and covered by a test, and CI is green on the PR merge commit. No blockers.
+
+Follow-ups that do not block this merge:
+1. Rotate the GitHub credential to a repository-scoped fine-grained PAT and remove the plaintext `~/.git-credentials` (section 5).
+2. Before enabling Stripe: refuse a second open unlock checkout for the same RCA (Note B, 1.4).
+3. Keep `NODE_ENV=production` on every server so the public mock secret is refused (Note A, 1.1).
