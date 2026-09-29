@@ -227,3 +227,25 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 - **Accounts without a password.** Users who signed up with Google can set a password later with "Forgot password". Settings hides "Change password" until one exists, and account deletion then asks only for the typed confirmation.
 - **Terms.** Using "Continue with Google" on the sign-up page counts as accepting the Terms; the button says so.
 - **Tests.** They use a locally generated RSA key and mocked Google endpoints. A real Google project is needed only in production (docs/DEPLOY.md).
+
+## Phase 8: billing
+
+Where the brief was open, the option that protects revenue integrity was chosen.
+
+- **Only verified provider events change billing state.** `paid_at`, `payment_reference`, `plan` and `subscription_status` are written only by `handleBillingEvent()` after the webhook signature (or, for the mock, the server acting as provider) is verified. A success redirect (`?checkout=done`) only shows a message. The client cannot send `paid_at`.
+- **The mock provider is refused in production** unless `ALLOW_MOCK_PAYMENTS=true`, and a server running the mock must set its own `MOCK_WEBHOOK_SECRET`. Otherwise anyone could "pay" with the TEST MODE page.
+- **Only the checkout's creator can complete a mock session**, and each session has one outcome. A failed attempt needs a new checkout.
+- **Sample RCAs count toward the free bucket.** They are real, exportable RCAs. A user can delete the sample to free the slot.
+- **Soft-deleted RCAs do not count.** Deleting an unpaid RCA frees its slot, as the brief says. Restoring is not offered, so this cannot be used to bypass the cap.
+- **The bucket is per workspace**, as the brief says. So that extra workspaces cannot multiply it without limit, a user may own at most `QUOTA_OWNED_WORKSPACES` workspaces (default 5, the personal one included; 422 `QUOTA_EXCEEDED`). The check runs under the user's quota lock, so parallel requests cannot overshoot. A workspace transfer is accepted by the recipient and is not counted against their limit.
+- **Only the primary owner (workspace.owner_id) manages billing.** Co-owners see the plan but cannot subscribe, cancel or open the portal. Billing decisions stay with the account that pays.
+- **Without an active Team plan, everyone except the primary owner is capped to Viewer**, including co-owners and editors. That covers PAST_DUE, CANCELED and Solo alike. Nobody is removed; access returns when the plan is active again. The primary owner keeps full access to their own workspace.
+- **Solo allows no invitations** (403 `SUBSCRIPTION_REQUIRED`), neither to the workspace nor to single RCAs.
+- **Seats count members other than the primary owner, RCA collaborators and pending invitations.** An invitation reserves a seat, so a Team with N seats cannot send more than N invitations in advance. New seat counts below the seats in use are refused.
+- **An unlock can be bought even when the workspace is subscribed.** It keeps that RCA unlocked if the subscription ends later. Buying an unlock for an already paid RCA is refused (409).
+- **Entitlement also needs `current_period_end` in the future.** If a cancellation or renewal event is lost, the subscription still stops at the end of the paid period rather than running forever.
+- **Out-of-order or stale events are ignored.** Renewal, past-due and cancellation events must name the workspace's current subscription; events for an older subscription are recorded with result `ignored`.
+- **Data-export PDFs are watermarked too.** The "Download my data" archive uses the same watermark rule as print, PDF and DOCX, so the export is not a way around it.
+- **Prices shown come from env vars, and Stripe charges its own prices.** `docs/STRIPE_SETUP.md` says to keep them equal. The amount stored in the checkout session and in the history is the one shown to the buyer.
+- **Currency.** One currency per installation (`BILLING_CURRENCY`, default USD). There is no tax handling; Stripe Tax can be enabled in the Stripe dashboard later.
+- **The demo seed activates a Team plan** for the demo workspace through `handleBillingEvent()` with a mock event (1-year period), because the demo shows collaborators. The seed only runs in development.

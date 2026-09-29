@@ -41,6 +41,19 @@ async function lockUser(tx: Tx, userId: string) {
   await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, `quota:${userId}`);
 }
 
+/** Create a workspace owned by `userId` unless they already own the maximum (checked under the user's quota lock). */
+export async function withinWorkspaceQuota<T>(userId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return unscoped('workspace quota', () =>
+    prisma.$transaction(async (tx) => {
+      await lockUser(tx, userId);
+      const owned = await tx.workspace.count({ where: { owner_id: userId } });
+      const limit = config.quota.ownedWorkspaces;
+      if (owned >= limit) throw quotaExceeded(`You can own up to ${limit} workspaces. Delete one you no longer need.`, { limit, used: owned });
+      return fn(tx);
+    }),
+  );
+}
+
 export async function ownerOfWorkspace(workspaceId: string) {
   return (await unscoped('workspace owner for quota', () => prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { owner_id: true } }))).owner_id;
 }

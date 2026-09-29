@@ -72,6 +72,8 @@ export const envSchema = z
     MAX_UPLOAD_MB: int(10, 1),
     QUOTA_STORAGE_MB: int(200, 1),
     QUOTA_RCA_COUNT: int(500, 1),
+    /** Workspaces one user may own, the personal one included (each unsubscribed workspace has its own free RCA bucket). */
+    QUOTA_OWNED_WORKSPACES: int(5, 1),
 
     PDF_TIMEOUT_MS: int(20_000, 1000),
     PDF_CONCURRENCY: int(2, 1),
@@ -87,6 +89,30 @@ export const envSchema = z
     GOOGLE_CLIENT_SECRET: optional,
 
     SEED_DEMO: bool(false),
+
+    // ---------- Billing (docs/BILLING_PLAN.md) ----------
+    PAYMENT_PROVIDER: z.enum(['mock', 'stripe']).default('mock'),
+    /** The mock provider grants paid features without payment; refused in production unless this is true (staging). */
+    ALLOW_MOCK_PAYMENTS: bool(false),
+    MOCK_WEBHOOK_SECRET: z.string().default('mock-webhook-secret-for-tests'),
+    BILLING_CURRENCY: z
+      .string()
+      .regex(/^[A-Za-z]{3}$/, 'must be an ISO 4217 code such as USD')
+      .default('USD')
+      .transform((v) => v.toUpperCase()),
+    FREE_RCA_LIMIT: int(3, 0),
+    RCA_UNLOCK_PRICE_CENTS: int(900, 0),
+    SOLO_MONTHLY_PRICE_CENTS: int(1200, 0),
+    TEAM_BASE_PRICE_CENTS: int(2900, 0),
+    TEAM_SEAT_PRICE_CENTS: int(800, 0),
+    TEAM_MIN_SEATS: int(1, 1),
+    TEAM_MAX_SEATS: int(100, 1),
+    STRIPE_SECRET_KEY: optional,
+    STRIPE_WEBHOOK_SECRET: optional,
+    STRIPE_PRICE_RCA_UNLOCK: optional,
+    STRIPE_PRICE_SOLO_MONTHLY: optional,
+    STRIPE_PRICE_TEAM_BASE: optional,
+    STRIPE_PRICE_TEAM_SEAT: optional,
   })
   .superRefine((e, ctx) => {
     const prod = e.NODE_ENV === 'production';
@@ -101,6 +127,15 @@ export const envSchema = z
     need(e.STORAGE_DRIVER === 's3' && (!e.S3_BUCKET || !e.S3_ACCESS_KEY_ID || !e.S3_SECRET_ACCESS_KEY), 'S3_BUCKET', 'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required when STORAGE_DRIVER=s3');
     need(prod && e.STORAGE_DRIVER === 'local', 'STORAGE_DRIVER', 'local disk storage is for development only; use s3 in production');
     need(!!e.GOOGLE_CLIENT_ID !== !!e.GOOGLE_CLIENT_SECRET, 'GOOGLE_CLIENT_SECRET', 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together');
+    need(
+      prod && e.PAYMENT_PROVIDER === 'mock' && !e.ALLOW_MOCK_PAYMENTS,
+      'PAYMENT_PROVIDER',
+      'mock would unlock paid features without payment; use stripe in production (or ALLOW_MOCK_PAYMENTS=true on a staging server)',
+    );
+    need(prod && e.PAYMENT_PROVIDER === 'mock' && e.MOCK_WEBHOOK_SECRET === 'mock-webhook-secret-for-tests', 'MOCK_WEBHOOK_SECRET', 'set a random secret when the mock provider runs on a server');
+    for (const key of ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_RCA_UNLOCK', 'STRIPE_PRICE_SOLO_MONTHLY', 'STRIPE_PRICE_TEAM_BASE', 'STRIPE_PRICE_TEAM_SEAT'] as const) {
+      need(e.PAYMENT_PROVIDER === 'stripe' && !e[key], key, 'is required when PAYMENT_PROVIDER=stripe (docs/STRIPE_SETUP.md)');
+    }
   });
 
 export type Env = z.infer<typeof envSchema>;
@@ -166,12 +201,33 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     },
     uploadDir: path.resolve(e.UPLOAD_DIR),
     maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
-    quota: { storageBytes: e.QUOTA_STORAGE_MB * 1024 * 1024, rcaCount: e.QUOTA_RCA_COUNT },
+    quota: { storageBytes: e.QUOTA_STORAGE_MB * 1024 * 1024, rcaCount: e.QUOTA_RCA_COUNT, ownedWorkspaces: e.QUOTA_OWNED_WORKSPACES },
     pdf: { timeoutMs: e.PDF_TIMEOUT_MS, concurrency: e.PDF_CONCURRENCY, chromiumSandbox: e.PDF_CHROMIUM_SANDBOX, internalBaseUrlOverride: e.INTERNAL_BASE_URL },
     accountDeletionGraceMs: e.ACCOUNT_DELETION_GRACE_DAYS * 86_400_000,
     jobs: { enabled: e.JOBS_ENABLED, intervalMs: e.JOBS_INTERVAL_MINUTES * 60_000 },
     google: { clientId: e.GOOGLE_CLIENT_ID, clientSecret: e.GOOGLE_CLIENT_SECRET },
     seedDemo: e.SEED_DEMO,
+    billing: {
+      provider: e.PAYMENT_PROVIDER,
+      mockWebhookSecret: e.MOCK_WEBHOOK_SECRET,
+      currency: e.BILLING_CURRENCY,
+      freeRcaLimit: e.FREE_RCA_LIMIT,
+      prices: {
+        rcaUnlock: e.RCA_UNLOCK_PRICE_CENTS,
+        soloMonthly: e.SOLO_MONTHLY_PRICE_CENTS,
+        teamBase: e.TEAM_BASE_PRICE_CENTS,
+        teamSeat: e.TEAM_SEAT_PRICE_CENTS,
+      },
+      teamSeats: { min: e.TEAM_MIN_SEATS, max: e.TEAM_MAX_SEATS },
+      stripe: {
+        secretKey: e.STRIPE_SECRET_KEY,
+        webhookSecret: e.STRIPE_WEBHOOK_SECRET,
+        priceRcaUnlock: e.STRIPE_PRICE_RCA_UNLOCK,
+        priceSoloMonthly: e.STRIPE_PRICE_SOLO_MONTHLY,
+        priceTeamBase: e.STRIPE_PRICE_TEAM_BASE,
+        priceTeamSeat: e.STRIPE_PRICE_TEAM_SEAT,
+      },
+    },
   };
 }
 

@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { useAuth } from '../lib/auth';
+import { BillingAlertBanner } from './BillingBits';
 import { ROLE_LABEL } from '../lib/labels';
 import { auditWorkspaces } from '../lib/permissions';
 import { useWorkspace } from '../lib/workspace';
@@ -73,6 +74,9 @@ export function Layout() {
             <NavLink to="/settings" className="mt-2 block text-white underline">
               Account settings
             </NavLink>
+            <NavLink to="/settings/billing" className="mt-1 block text-white underline">
+              Billing
+            </NavLink>
             <button type="button" onClick={logout} className="mt-2 text-white underline">
               Log out
             </button>
@@ -81,6 +85,7 @@ export function Layout() {
       </aside>
       <main className="min-w-0 flex-1 p-6">
         {user && !user.email_verified && <VerifyBanner email={user.email} />}
+        <BillingAlertBanner />
         <Outlet />
       </main>
     </div>

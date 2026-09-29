@@ -12,6 +12,9 @@ export function PublicLayout({ children }: { children: ReactNode }) {
             RCA Dashboard
           </Link>
           <nav className="flex items-center gap-3 text-sm">
+            <Link to="/pricing" className="text-navy">
+              Pricing
+            </Link>
             {user ? (
               <Link to="/dashboard" className="btn-primary">
                 Open the app

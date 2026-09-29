@@ -40,6 +40,9 @@ apps/api/                 Express API (npm workspace "@rca/api")
   src/routes/rca/         Every /rcas/:id/... route, mounted behind rcaAccessMiddleware
   src/services/           Business logic (RCA number, workflow rules, queries)
   src/export/             print HTML, PDF (sandboxed renderer), DOCX, CSV/XLSX
+  src/billing/            Payments (docs/BILLING_PLAN.md): types.ts (PaymentProvider contract), providers/ (mock, stripe),
+                          events.ts (handleBillingEvent: the ONLY writer of paid_at / plan / subscription_status),
+                          entitlements.ts (bucket, watermark, invite gating), service.ts, mockActions.ts (TEST MODE)
   src/services/lifecycle.ts  Account soft delete and the purge job; dataExport.ts: "export my data" zip
   src/jobs/               In-process scheduler (JOBS_ENABLED) for the purge job
   src/email/              Email providers (console, smtp, resend) and templates
@@ -54,7 +57,7 @@ apps/web/                 React app (npm workspace "@rca/web")
 apps/web/Caddyfile        Static files, /api proxy, security headers, automatic HTTPS
 ops/backup/               pg_dump backup/restore image; ops/seccomp/chromium.json: Chromium sandbox profile
 .github/workflows/ci.yml  Lint, tests (incl. isolation + S3), e2e, image builds
-docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, ASSUMPTIONS.md, DEPLOY.md
+docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, BILLING_PLAN.md, STRIPE_SETUP.md, ASSUMPTIONS.md, DEPLOY.md
 ```
 
 ## Naming conventions
@@ -73,6 +76,10 @@ docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, ASSUMPTIONS.md, DEP
   `src/tenancy/prismaScope.ts` using the request scope set by `requireAuth`. Outside a request, wrap work in
   `unscoped('reason', fn)`; never import the raw PrismaClient. Unknown or invisible RCAs are 404, never 403.
 - **Authorization:** only `src/policy/policy.ts` decides (`authorize(ctx, action, resource)`); routes hold no role logic.
+- **Billing:** never write `paid_at`, `payment_reference`, `plan` or `subscription_status` outside `handleBillingEvent()`;
+  a client redirect is never proof of payment. Roles of everyone but the primary owner are capped to VIEWER without an
+  active Team plan (`cappedRole` in `src/policy/access.ts`). Tests use the mock provider only (`subscribe()` in test/helpers.ts;
+  e2e `subscribeTeamViaUi`). Billing error codes: `BUCKET_FULL` (422), `SUBSCRIPTION_REQUIRED` / `SEAT_LIMIT_REACHED` (403).
   New `/rcas/:id/...` routes go in `src/routes/rca/` (mounted behind `rcaAccessMiddleware`) and need a case in
   `test/isolation.test.ts` (its coverage check fails otherwise). The web app reads `rca.permissions`; it never re-derives roles.
 - Every create/update/submit/sign/close/reopen/export writes `audit_log` via `src/lib/audit.ts`, in the same transaction.

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { BucketIndicator, bucketWorkspaceId } from '../components/BillingBits';
 import { Link } from 'react-router';
 import { api, buildQuery } from '../api/client';
 import type { CauseCategory, Severity, Team } from '../api/types';
@@ -46,6 +47,7 @@ export function DashboardPage() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1>Dashboard</h1>
+        <BucketIndicator workspaceId={bucketWorkspaceId(user, current)} />
         <span className="text-sm text-slate-600">{current ? current.name : 'All workspaces'}</span>
       </div>
       <ErrorBanner error={q.error} />

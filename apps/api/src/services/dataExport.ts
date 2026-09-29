@@ -14,6 +14,7 @@ import { storage } from '../storage/index.js';
 import { unscoped } from '../tenancy/context.js';
 import { listSessions } from '../auth/sessions.js';
 import { rcaInclude, serializeRca } from './rcaQueries.js';
+import { needsWatermark } from '../billing/entitlements.js';
 
 const json = (v: unknown) => JSON.stringify(toJson(v), null, 2);
 
@@ -26,7 +27,7 @@ export async function streamDataExport(userId: string, res: Response, pdfBaseUrl
     const memberships = await prisma.workspaceMember.findMany({ where: { user_id: userId }, include: { workspace: { select: { id: true, name: true, is_personal: true, owner_id: true } } } });
     const collaborations = await prisma.rcaCollaborator.findMany({ where: { user_id: userId }, include: { rca: { select: { id: true, rca_number: true, workspace_id: true } } } });
     const security = await prisma.auditLog.findMany({ where: { category: 'SECURITY', user_id: userId }, orderBy: { at: 'asc' } });
-    const rcas = await prisma.rca.findMany({ where: { is_deleted: false, workspace: { owner_id: userId } }, include: rcaInclude, orderBy: { rca_number: 'asc' } });
+    const rcas = await prisma.rca.findMany({ where: { is_deleted: false, workspace: { owner_id: userId } }, include: { ...rcaInclude, workspace: true }, orderBy: { rca_number: 'asc' } });
     const uploads = await prisma.rcaAttachment.findMany({ where: { uploaded_by: userId, kind: 'FILE', file_path: { not: null } }, select: { id: true, file_name: true, file_path: true, rca_id: true } });
     return { user, memberships, collaborations, security, rcas, uploads, sessions: await listSessions(userId) };
   });
@@ -58,7 +59,7 @@ export async function streamDataExport(userId: string, res: Response, pdfBaseUrl
     const base = `rcas/${rca.workspace_id.slice(0, 8)}-${rca.rca_number}`;
     zip.append(json(serializeRca(rca)), { name: `${base}.json` });
     try {
-      zip.append(await renderPdf(renderPrintHtml(buildExportModel(rca)), pdfBaseUrl), { name: `${base}.pdf` });
+      zip.append(await renderPdf(renderPrintHtml(buildExportModel(rca, new Date(), { billingWatermark: needsWatermark(rca, rca.workspace) })), pdfBaseUrl), { name: `${base}.pdf` });
     } catch (err) {
       logger.warn('export: pdf failed', { rca_id: rca.id, error: String(err) });
       zip.append(`PDF could not be generated for ${rca.rca_number}; the JSON file has all data.`, { name: `${base}.pdf.txt` });

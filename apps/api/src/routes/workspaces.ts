@@ -7,8 +7,11 @@ import { writeAudit } from '../lib/audit.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 import { parse, zUuid } from '../lib/validate.js';
 import { canInWorkspace, type WorkspaceAction } from '../policy/policy.js';
+import { cappedRole } from '../policy/access.js';
+import { assertCanInvite } from '../billing/entitlements.js';
 import { checkRoleTeam, createInvitation } from '../services/invitations.js';
 import { purgeWorkspace, removeStoredFiles } from '../services/purge.js';
+import { withinWorkspaceQuota } from '../services/quota.js';
 import { unscoped } from '../tenancy/context.js';
 
 export const workspacesRouter = Router();
@@ -26,6 +29,8 @@ async function workspaceFor(req: Request, action: WorkspaceAction) {
     prisma.workspaceMember.findFirst({ where: { workspace_id: id, user_id: me.id } }),
   ]);
   if (!ws || !member) throw notFound('Workspace not found');
+  // Without an active Team subscription, everyone but the primary owner is read-only.
+  member.role = cappedRole(member.role, me.id, ws) ?? member.role;
   if (!canInWorkspace(member.role, action)) throw forbidden(action === 'members.manage' || action === 'workspace.manage' ? 'Only workspace owners can do this' : undefined);
   return { me, ws, member };
 }
@@ -46,7 +51,7 @@ const nameSchema = z.object({ name: z.string().trim().min(1, 'Name is required')
 workspacesRouter.post('/workspaces', async (req, res) => {
   const me = currentUser(req);
   const { name } = parse(nameSchema, req.body);
-  const ws = await prisma.workspace.create({ data: { name, owner_id: me.id, members: { create: { user_id: me.id, role: 'OWNER' } } } });
+  const ws = await withinWorkspaceQuota(me.id, (tx) => tx.workspace.create({ data: { name, owner_id: me.id, members: { create: { user_id: me.id, role: 'OWNER' } } } }));
   await securityEvent(me.id, 'CREATE', { workspace_id: ws.id, name }, req);
   res.status(201).json({ ...ws, role: 'OWNER', team: null });
 });
@@ -157,6 +162,7 @@ workspacesRouter.post('/workspaces/:wid/invitations', async (req, res) => {
   const body = parse(inviteSchema, req.body);
   checkRoleTeam(body.role, body.team, false);
   if (ws.is_personal && body.role === 'OWNER') throw badRequest({ role: 'A personal workspace has a single owner' });
+  await assertCanInvite(prisma, ws);
   const inv = await createInvitation(me, { workspace_id: ws.id }, body);
   res.status(201).json({ id: inv.id, email: inv.email, role: inv.role, team: inv.team, expires_at: inv.expires_at });
 });

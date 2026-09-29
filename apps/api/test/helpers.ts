@@ -6,6 +6,7 @@ import { createSession } from '../src/auth/sessions.js';
 import { hashPassword } from '../src/auth/password.js';
 import { prisma } from '../src/db.js';
 import { unscoped } from '../src/tenancy/context.js';
+import { handleBillingEvent } from '../src/billing/events.js';
 
 export const app = createApp();
 // One server bound explicitly to 127.0.0.1. supertest's default (a new ephemeral server per request on
@@ -21,6 +22,9 @@ export const raw = <T>(fn: () => Promise<T>) => unscoped('test fixture', fn);
 export const PASSWORD = 'Correct-Horse-9';
 
 const TABLES = [
+  'billing_events',
+  'billing_history',
+  'checkout_sessions',
   'audit_log',
   'support_grants',
   'usage_quotas',
@@ -105,7 +109,41 @@ export async function createTeam(): Promise<{ a: Record<RoleKey, Actor>; workspa
   await addMember(ws.id, a.QA, 'CONTRIBUTOR', 'QA');
   await addMember(ws.id, a.PROD, 'CONTRIBUTOR', 'PROD');
   await addMember(ws.id, a.VIEWER, 'VIEWER');
+  // Collaboration is a Team feature: the shared workspace has an active Team subscription.
+  await subscribe(ws.id, 'TEAM', 20);
   return { a, workspaceId: ws.id };
+}
+
+let eventCounter = 0;
+
+/** Give a workspace an active subscription through the real event path (as a verified webhook would). */
+export async function subscribe(workspaceId: string, plan: 'SOLO' | 'TEAM', seats = 5, subscriptionRef = `test_sub_${workspaceId.slice(0, 8)}`) {
+  eventCounter += 1;
+  await handleBillingEvent('mock', {
+    id: `test_evt_activate_${workspaceId}_${eventCounter}`,
+    type: 'SUBSCRIPTION_ACTIVATED',
+    workspaceId,
+    plan,
+    seats,
+    subscriptionRef,
+    customerRef: `test_cus_${workspaceId.slice(0, 8)}`,
+    periodEnd: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    occurredAt: new Date().toISOString(),
+  });
+}
+
+/** Send a subscription lifecycle event for the workspace's current subscription. */
+export async function subscriptionEvent(workspaceId: string, type: 'SUBSCRIPTION_PAST_DUE' | 'SUBSCRIPTION_CANCELED' | 'SUBSCRIPTION_RENEWED', extra: Record<string, unknown> = {}) {
+  eventCounter += 1;
+  const ws = await raw(() => prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } }));
+  return handleBillingEvent('mock', {
+    id: `test_evt_${type}_${workspaceId}_${eventCounter}`,
+    type,
+    workspaceId,
+    subscriptionRef: ws.subscription_ref ?? undefined,
+    occurredAt: new Date().toISOString(),
+    ...extra,
+  });
 }
 
 export const bearer = (a: Actor) => ({ Authorization: `Bearer ${a.token}` });

@@ -6,6 +6,7 @@ import { prisma } from '../db.js';
 import { pageResult, parsePage } from '../lib/pagination.js';
 import { parse, zDate, zUuid } from '../lib/validate.js';
 import { canInWorkspace } from '../policy/policy.js';
+import { cappedRole } from '../policy/access.js';
 import { userRef } from '../services/rcaQueries.js';
 
 export const auditRouter = Router();
@@ -31,8 +32,8 @@ auditRouter.get('/audit', async (req, res) => {
   const raw = req.query as Record<string, unknown>;
   const f = parse(filterSchema, Object.fromEntries(Object.entries(raw).filter(([k, v]) => k in filterSchema.shape && v !== '')));
   const p = parsePage(req.query, ['at'], '-at');
-  const memberships = await prisma.workspaceMember.findMany({ where: { user_id: me.id } });
-  const allowed = memberships.filter((m) => canInWorkspace(m.role, 'audit.view')).map((m) => m.workspace_id);
+  const memberships = await prisma.workspaceMember.findMany({ where: { user_id: me.id }, include: { workspace: true } });
+  const allowed = memberships.filter((m) => canInWorkspace(cappedRole(m.role, me.id, m.workspace), 'audit.view')).map((m) => m.workspace_id);
   const and: Prisma.AuditLogWhereInput[] = [{ category: 'DATA' }, { workspace_id: { in: allowed } }];
   if (f.workspace_id) and.push({ workspace_id: f.workspace_id });
   if (f.rca_id) and.push({ rca_id: f.rca_id });

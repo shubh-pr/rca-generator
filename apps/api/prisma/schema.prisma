@@ -110,6 +110,23 @@ enum SignoffRole {
   @@map("signoff_role")
 }
 
+enum BillingPlan {
+  NONE
+  SOLO
+  TEAM
+
+  @@map("billing_plan")
+}
+
+enum SubscriptionStatus {
+  NONE
+  ACTIVE
+  PAST_DUE
+  CANCELED
+
+  @@map("subscription_status")
+}
+
 enum EmailTokenType {
   VERIFY_EMAIL
   RESET_PASSWORD
@@ -158,6 +175,7 @@ model User {
   refresh_tokens    RefreshToken[]
   quota             UsageQuota?
   support_grants    SupportGrant[]
+  checkouts         CheckoutSession[]
 
   @@map("users")
 }
@@ -167,13 +185,22 @@ model Workspace {
   name        String   @db.VarChar(120)
   /// Primary owner: the user whose quota this workspace uses.
   owner_id    String   @db.Uuid
-  /// Billing extension point; only FREE exists today.
-  plan        String   @default("FREE") @db.VarChar(20)
   is_personal Boolean  @default(false)
+  /// Billing (docs/BILLING_PLAN.md). Changed only by verified provider events.
+  plan                 BillingPlan        @default(NONE)
+  subscription_status  SubscriptionStatus @default(NONE)
+  payment_customer_ref String?            @db.VarChar(120)
+  subscription_ref     String?            @db.VarChar(120)
+  current_period_end   DateTime?          @db.Timestamptz(3)
+  /// Collaborator seats bought with a Team subscription.
+  seats                Int                @default(0)
   created_at  DateTime @default(now()) @db.Timestamptz(3)
   updated_at  DateTime @updatedAt @db.Timestamptz(3)
 
   owner          User              @relation("WorkspaceOwner", fields: [owner_id], references: [id])
+  checkouts      CheckoutSession[]
+  billing_events BillingEvent[]
+  billing_history BillingHistory[]
   members        WorkspaceMember[]
   rcas           Rca[]
   invitations    Invitation[]
@@ -346,6 +373,9 @@ model Rca {
   lessons_not_well    String?
   lessons_key         String?
   is_sample           Boolean          @default(false)
+  /// Set once by a verified RCA_UNLOCK payment; never cleared.
+  paid_at             DateTime?        @db.Timestamptz(3)
+  payment_reference   String?          @db.VarChar(120)
   is_deleted          Boolean          @default(false)
   closed_at           DateTime?        @db.Timestamptz(3)
   created_at          DateTime         @default(now()) @db.Timestamptz(3)
@@ -364,6 +394,8 @@ model Rca {
   collaborators   RcaCollaborator[]
   invitations     Invitation[]
   audit_entries   AuditLog[]
+  checkouts       CheckoutSession[]
+  billing_history BillingHistory[]
 
   @@unique([workspace_id, rca_number])
   @@index([workspace_id, is_deleted, rca_date])
@@ -568,4 +600,75 @@ model AuditLog {
   @@index([user_id, at])
   @@index([at])
   @@map("audit_log")
+}
+
+// ---------- Billing (docs/BILLING_PLAN.md) ----------
+
+/** A checkout we started with the payment provider; events are cross-checked against it. */
+model CheckoutSession {
+  id                  String       @id @default(uuid()) @db.Uuid
+  provider            String       @db.VarChar(20)
+  provider_session_id String?      @db.VarChar(200)
+  /// RCA_UNLOCK or SUBSCRIPTION
+  kind                String       @db.VarChar(20)
+  workspace_id        String       @db.Uuid
+  rca_id              String?      @db.Uuid
+  plan                BillingPlan?
+  seats               Int?
+  amount_cents        Int
+  currency            String       @db.VarChar(3)
+  /// OPEN, COMPLETED, FAILED, CANCELED
+  status              String       @default("OPEN") @db.VarChar(12)
+  created_by          String?      @db.Uuid
+  created_at          DateTime     @default(now()) @db.Timestamptz(3)
+  completed_at        DateTime?    @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  rca       Rca?      @relation(fields: [rca_id], references: [id], onDelete: SetNull)
+  creator   User?     @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([workspace_id])
+  @@index([provider, provider_session_id])
+  @@map("checkout_sessions")
+}
+
+/** Append-only log of every provider event; UNIQUE(provider, provider_event_id) makes replays no-ops. */
+model BillingEvent {
+  id                String    @id @default(uuid()) @db.Uuid
+  provider          String    @db.VarChar(20)
+  provider_event_id String    @db.VarChar(200)
+  type              String    @db.VarChar(40)
+  payload           Json
+  workspace_id      String?   @db.Uuid
+  received_at       DateTime  @default(now()) @db.Timestamptz(3)
+  processed_at      DateTime? @db.Timestamptz(3)
+  result            String?   @db.VarChar(200)
+
+  workspace Workspace? @relation(fields: [workspace_id], references: [id], onDelete: SetNull)
+
+  @@unique([provider, provider_event_id])
+  @@index([workspace_id, received_at])
+  @@map("billing_events")
+}
+
+/** Payment and invoice lines shown in Account settings > Billing. */
+model BillingHistory {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspace_id String   @db.Uuid
+  rca_id       String?  @db.Uuid
+  /// RCA_UNLOCK or SUBSCRIPTION
+  kind         String   @db.VarChar(20)
+  description  String   @db.VarChar(200)
+  amount_cents Int
+  currency     String   @db.VarChar(3)
+  /// PAID or FAILED
+  status       String   @db.VarChar(10)
+  reference    String?  @db.VarChar(200)
+  occurred_at  DateTime @default(now()) @db.Timestamptz(3)
+
+  workspace Workspace @relation(fields: [workspace_id], references: [id], onDelete: Cascade)
+  rca       Rca?      @relation(fields: [rca_id], references: [id], onDelete: SetNull)
+
+  @@index([workspace_id, occurred_at])
+  @@map("billing_history")
 }

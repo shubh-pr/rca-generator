@@ -1,4 +1,4 @@
-import type { ExportModel, KV, TableBlock } from './model.js';
+import { BILLING_WATERMARK_TEXT, type ExportModel, type KV, type TableBlock } from './model.js';
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -98,6 +98,10 @@ export function renderPrintHtml(m: ExportModel): string {
   section.team { break-before: page; page-break-before: always; }
   .watermark { position: fixed; top: 38%; left: 0; width: 100%; text-align: center; font-size: 110pt; font-weight: bold;
     color: rgba(192, 0, 0, 0.13); transform: rotate(-35deg); z-index: 1000; pointer-events: none; letter-spacing: 8pt; }
+  /* Free-plan watermark: a light fixed band repeated on every page, inside the page body so the
+     @page header/footer, page breaks and tables (SPEC 7) are untouched. */
+  .billing-watermark { position: fixed; left: 0; right: 0; bottom: 42%; text-align: center; transform: rotate(-35deg);
+    font-size: 15pt; font-weight: bold; letter-spacing: 1pt; color: rgba(31, 56, 100, 0.22); z-index: 999; pointer-events: none; }
   .screen-bar { display: none; }
   @media screen {
     body { background: #e5e7eb; }
@@ -110,6 +114,7 @@ export function renderPrintHtml(m: ExportModel): string {
 </head>
 <body>
 ${m.isDraft ? '<div class="watermark" aria-hidden="true">DRAFT</div>' : ''}
+${m.billingWatermark ? `<div class="billing-watermark" data-billing-watermark>${esc(BILLING_WATERMARK_TEXT)}</div>` : ''}
 <main class="sheet">
   <div class="screen-bar">${esc(headerLine)}</div>
   <h1>${esc(m.title)}</h1>

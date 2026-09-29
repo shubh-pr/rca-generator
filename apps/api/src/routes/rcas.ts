@@ -15,6 +15,7 @@ import { checkIncidentTimes } from '../services/rcaRules.js';
 import { loadRcaAccess } from '../policy/access.js';
 import { createClosedSample } from '../services/sampleData.js';
 import { withinQuota } from '../services/quota.js';
+import { assertBucketRoom } from '../billing/entitlements.js';
 import { unscoped } from '../tenancy/context.js';
 import { rcaEditableFields } from './rca/fields.js';
 
@@ -79,7 +80,11 @@ rcasRouter.post('/rcas', async (req, res) => {
   if (!me.email_verified_at) throw emailNotVerified();
   checkIncidentTimes(body);
   const { workspace_id: _w, ...fields } = body;
-  const id = await withinQuota(workspaceId, { rcas: 1 }, (tx) => createRcaRecord(me, workspaceId, fields, tx));
+  const id = await withinQuota(workspaceId, { rcas: 1 }, async (tx) => {
+    // Free bucket: at most FREE_RCA_LIMIT unpaid RCAs unless the workspace is subscribed.
+    await assertBucketRoom(tx, await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId } }));
+    return createRcaRecord(me, workspaceId, fields, tx);
+  });
   const { ctx } = await loadRcaAccess(prisma, me, id);
   res.status(201).json(serializeRca(await loadFullRca(prisma, id), ctx));
 });
@@ -96,11 +101,13 @@ rcasRouter.post('/rcas/sample', async (req, res) => {
   if (!canInWorkspace(await workspaceRole(prisma, me.id, workspaceId), 'rca.create')) throw forbidden();
   // Ownership was checked above; the rows are created in one transaction outside the scope filter,
   // because child rows of an uncommitted RCA are not visible to the filter's parent check.
-  const id = await withinQuota(workspaceId, { rcas: 1 }, (tx) =>
-    unscoped('create onboarding sample in the user\'s own workspace', async () =>
+  const id = await withinQuota(workspaceId, { rcas: 1 }, async (tx) => {
+    // The sample is an RCA too, so it takes a slot of the free bucket (it can be deleted).
+    await assertBucketRoom(tx, await tx.workspace.findUniqueOrThrow({ where: { id: workspaceId } }));
+    return unscoped('create onboarding sample in the user\'s own workspace', async () =>
       (await createClosedSample(tx, workspaceId, { owner: me, lead: me, DEV: me, QA: me, PROD: me }, { isSample: true })).id,
-    ),
-  );
+    );
+  });
   const { ctx } = await loadRcaAccess(prisma, me, id);
   res.status(201).json(serializeRca(await loadFullRca(prisma, id), ctx));
 });

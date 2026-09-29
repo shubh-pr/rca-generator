@@ -12,6 +12,7 @@ import { jsonReplacer } from './lib/json.js';
 import { logger } from './lib/logger.js';
 import { adminRouter } from './routes/admin.js';
 import { auditRouter } from './routes/audit.js';
+import { billingPublicRouter, billingRouter, webhookRouter } from './routes/billing.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { exportsRouter } from './routes/exports.js';
 import { internalRouter } from './routes/internal.js';
@@ -72,6 +73,8 @@ export function createApp() {
   app.use(internalRouter);
 
   // Strict CORS: only the web app's origin, with credentials for the refresh cookie.
+  // Payment webhooks need the raw body for signature checks: mounted before the JSON parser and CORS.
+  app.use('/api/v1', webhookRouter);
   app.use(cors({ origin: (origin, cb) => cb(null, origin === config.corsOrigin), credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false, limit: '100kb' }));
@@ -86,12 +89,14 @@ export function createApp() {
   api.use(googleRouter);
   api.use(accountRouter);
   api.use(invitationsRouter);
+  api.use(billingPublicRouter);
 
   // Everything below requires a logged-in user and runs inside that user's tenant scope.
   const secured = Router();
   secured.use(requireAuth);
   secured.use(meDataRouter);
   secured.use(adminRouter);
+  secured.use(billingRouter);
   secured.use(workspacesRouter);
   secured.use(exportsRouter); // before /rcas/:id so "export" is not taken as an id
   secured.use(rcasRouter);

@@ -30,6 +30,8 @@ export interface TeamBlock {
 }
 
 export interface ExportModel {
+  /** Free-plan watermark: the RCA is unpaid and its workspace has no active subscription. */
+  billingWatermark: boolean;
   title: string;
   rcaNumber: string;
   projectName: string;
@@ -104,12 +106,16 @@ const FOLLOWUP_HEAD = ['Risk / follow-up', 'Owner', 'Due date'];
 const ATTACH_HEAD = ['Attachment', 'Description', 'Added by'];
 const SIGN_HEAD = ['Role', 'Name', 'Signature', 'Date'];
 
-export function buildExportModel(rca: FullRca | null, generatedAt = new Date()): ExportModel {
+/** Text of the free-plan watermark on print, PDF and DOCX. */
+export const BILLING_WATERMARK_TEXT = 'FREE PLAN · Unlock this RCA or subscribe to remove this watermark';
+
+export function buildExportModel(rca: FullRca | null, generatedAt = new Date(), opts: { billingWatermark?: boolean } = {}): ExportModel {
   const r = rca;
   const teams: Team[] = ['DEV', 'QA', 'PROD'];
   const section = (t: Team) => r?.sections.find((s) => s.team === t);
 
   return {
+    billingWatermark: opts.billingWatermark ?? false,
     title: 'Root Cause Analysis (RCA)',
     rcaNumber: r?.rca_number ?? '',
     projectName: r?.project_name ?? '',

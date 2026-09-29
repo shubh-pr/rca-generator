@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { createRcaViaUi, fillSection, signUpAndVerify, tokenFromMail, uniqueEmail } from './helpers';
+import { createRcaViaUi, fillSection, signUpAndVerify, subscribeTeamViaUi, tokenFromMail, uniqueEmail } from './helpers';
 
 test('owner invites a new person as DEV contributor; after sign-up they edit only the Dev section', async ({ browser }) => {
   const owner = await signUpAndVerify(browser, 'Olga Owner', uniqueEmail('owner'));
   const { rcaPath } = await createRcaViaUi(owner, { summary: 'Checkout outage shared with a contractor' });
+  // Inviting people needs the Team plan.
+  await subscribeTeamViaUi(owner, "Olga Owner's workspace");
 
   const devEmail = uniqueEmail('contractor');
   await owner.goto(rcaPath);
@@ -47,6 +49,9 @@ test('team workspace: create it, invite an existing user as editor, they see the
   await lead.getByLabel('Workspace name').fill('Payments team');
   await lead.getByRole('button', { name: 'Create workspace' }).click();
   await expect(lead.getByRole('heading', { name: 'Payments team' })).toBeVisible();
+  const workspacePath = new URL(lead.url()).pathname;
+  await subscribeTeamViaUi(lead, 'Payments team');
+  await lead.goto(workspacePath);
   const form = lead.getByTestId('invite-form');
   await form.getByLabel('Email').fill(peerEmail);
   await form.getByLabel('Role').selectOption('EDITOR');

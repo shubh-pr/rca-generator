@@ -12,6 +12,7 @@ import { renderPrintHtml } from '../../export/printHtml.js';
 import { authorize } from '../../policy/policy.js';
 import { loadFullRca } from '../../services/rcaQueries.js';
 import { rcaOf } from './access.js';
+import { needsWatermark } from '../../billing/entitlements.js';
 
 export const rcaExportsRouter = Router({ mergeParams: true });
 
@@ -23,7 +24,7 @@ rcaExportsRouter.get('/print', async (req, res) => {
   const { rca: row, ctx } = rcaOf(req);
   authorize(ctx, 'rca.export');
   const rca = await loadFullRca(prisma, row.id);
-  const html = renderPrintHtml(buildExportModel(rca));
+  const html = renderPrintHtml(buildExportModel(rca, new Date(), { billingWatermark: needsWatermark(row, row.workspace) }));
   await writeAudit(prisma, rcaAudit(rca, { entity: 'rca', entity_id: rca.id, action: 'EXPORT', new_value: { format: 'print', version: rca.version }, user_id: me.id }));
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:");
   res.type('html').send(html);
@@ -35,7 +36,7 @@ rcaExportsRouter.get('/export', async (req, res) => {
   authorize(ctx, 'rca.export');
   const { format } = parse(z.object({ format: z.enum(['pdf', 'docx']) }), { format: req.query.format });
   const rca = await loadFullRca(prisma, row.id);
-  const model = buildExportModel(rca);
+  const model = buildExportModel(rca, new Date(), { billingWatermark: needsWatermark(row, row.workspace) });
   // Chromium fetches the one-time print page from this same process over loopback.
   const baseUrl = config.pdf.internalBaseUrlOverride ?? `http://127.0.0.1:${req.socket.localPort}`;
   const buf = format === 'pdf' ? await renderPdf(renderPrintHtml(model), baseUrl) : await renderDocx(model);

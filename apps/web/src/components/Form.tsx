@@ -1,4 +1,6 @@
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { Link } from 'react-router';
+import { ApiError } from '../api/client';
 
 interface FieldProps {
   label: string;
@@ -53,8 +55,11 @@ export function Select({ options, placeholder = 'Select…', ...props }: SelectP
   );
 }
 
+const BILLING_CODES = ['BUCKET_FULL', 'SUBSCRIPTION_REQUIRED', 'SEAT_LIMIT_REACHED'];
+
 export function ErrorBanner({ error }: { error: unknown }) {
   if (!error) return null;
+  if (error instanceof ApiError && BILLING_CODES.includes(error.code)) return <BillingBlock code={error.code} message={error.message} />;
   const message = error instanceof Error ? error.message : String(error);
   return (
     <div className="rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
@@ -107,6 +112,28 @@ export function Pagination({
           Next ›
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Explains BUCKET_FULL / SUBSCRIPTION_REQUIRED / SEAT_LIMIT_REACHED with the way out. */
+export function BillingBlock({ code, message }: { code: string; message: string }) {
+  const cta =
+    code === 'BUCKET_FULL'
+      ? 'Unlock or delete an RCA, or subscribe for unlimited RCAs.'
+      : code === 'SEAT_LIMIT_REACHED'
+        ? 'Add seats in Billing.'
+        : 'Subscribe to the Team plan to invite people.';
+  return (
+    <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert" data-testid={`blocked-${code}`}>
+      {message} {cta}{' '}
+      <Link to="/settings/billing" className="font-semibold underline">
+        Billing
+      </Link>{' '}
+      ·{' '}
+      <Link to="/pricing" className="underline">
+        Pricing
+      </Link>
     </div>
   );
 }
