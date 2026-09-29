@@ -28,16 +28,21 @@ apps/api/                 Express API (npm workspace "@rca/api")
   prisma/seed.ts          Demo seed, only with NODE_ENV=development and SEED_DEMO=true (demo workspace + 2 RCAs)
   prisma/migrations/*/down.sql  Hand-written reverse migration where the up migration moves data
   scripts/purge-demo-data.ts    Deletes all @rca.local demo data; needs --confirm
+  scripts/promote-admin.ts      Sets/clears the platform-operator flag (dist/scripts/promote-admin.js in the image)
+  scripts/run-jobs.ts           Runs the scheduled jobs once (account purge), for an external cron
   src/app.ts              Express app factory (used by server.ts and tests)
   src/server.ts           HTTP entry point
-  src/auth/               ALL auth code: passwords, JWT, middleware (builds the tenant scope), /auth routes
+  src/auth/               ALL auth code: passwords, JWT, sessions, CSRF cookies, rate limits, Google sign-in (google.ts)
   src/tenancy/            Request scope (AsyncLocalStorage) + Prisma extension that filters every tenant query
   src/policy/             policy.ts: can()/authorize() for every action; access.ts: resolves a user's RCA access
   src/lib/                errors, validation helpers, audit, pagination, dates
   src/routes/             Collection routes (rcas, workspaces, audit, dashboard, exports)
   src/routes/rca/         Every /rcas/:id/... route, mounted behind rcaAccessMiddleware
   src/services/           Business logic (RCA number, workflow rules, queries)
-  src/export/             print HTML, PDF, DOCX, CSV/XLSX
+  src/export/             print HTML, PDF (sandboxed renderer), DOCX, CSV/XLSX
+  src/services/lifecycle.ts  Account soft delete and the purge job; dataExport.ts: "export my data" zip
+  src/jobs/               In-process scheduler (JOBS_ENABLED) for the purge job
+  src/email/              Email providers (console, smtp, resend) and templates
   test/                   Vitest API tests (supertest), run against the rca_test database
   scripts/prepareE2eDb.ts Creates/migrates/re-seeds the rca_e2e database for Playwright
 apps/web/                 React app (npm workspace "@rca/web")
@@ -105,3 +110,5 @@ New migration during development: `npm run db:migrate:dev -- --name <name>` (run
 - Docker Desktop on macOS cannot bind-mount from ~/Documents here, so the local compose uses named volumes only.
 - Never log personal data or tokens; use `logger` from `src/lib/logger.ts`, not console.
 - Quota-limited writes go through `withinQuota(workspaceId, add, (tx) => …)` and must write through `tx`.
+- Personal data is erased by `purgeAccount()`; new tables holding user data must be handled there (or cascade).
+- Auth responses must never reveal whether an email exists (generic messages, background email sending).

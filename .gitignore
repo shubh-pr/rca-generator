@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
+!.env.prod.example
 apps/api/uploads/
 apps/api/test-uploads/
 apps/web/test-results/
@@ -11,3 +14,6 @@ apps/web/e2e/.downloads/
 coverage/
 apps/web/e2e/.mail.log
 .env.prod
+# local file storage (development only; production uses object storage)
+uploads/
+/data/
