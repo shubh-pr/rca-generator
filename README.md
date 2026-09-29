@@ -37,6 +37,8 @@ Open **http://localhost:8080**. This local stack uses development settings:
 
 Or sign up with any email address.
 
+If your local database volume dates from the internal version of the app, the migrated demo accounts keep their old password `Password@123`. Run `docker compose down -v` for a fresh database with the accounts above.
+
 ### Development servers
 
 Requires Node.js ≥ 22.22 and Docker (for Postgres).
