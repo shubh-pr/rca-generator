@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 import { useAuth } from '../lib/auth';
 import { BillingAlertBanner } from './BillingBits';
+import { Breadcrumbs } from './Breadcrumbs';
 import { ROLE_LABEL } from '../lib/labels';
 import { auditWorkspaces } from '../lib/permissions';
 import { useWorkspace } from '../lib/workspace';
@@ -34,39 +35,45 @@ function WorkspaceSwitcher() {
   );
 }
 
+/**
+ * App shell: a full-height frame that never scrolls itself. The sidebar stays in place (its nav scrolls
+ * internally on very short screens, the account block stays pinned); only the main content scrolls.
+ */
 export function Layout() {
   const { user, logout } = useAuth();
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-56 shrink-0 flex-col bg-navy px-3 py-4 print:hidden">
-        <div className="mb-4 px-3 text-lg font-bold text-white">RCA Dashboard</div>
-        <WorkspaceSwitcher />
-        <nav className="flex flex-1 flex-col gap-1" aria-label="Main">
-          <NavLink to="/dashboard" className={linkClass}>
-            Dashboard
-          </NavLink>
-          <NavLink to="/rcas" end className={linkClass}>
-            RCA list
-          </NavLink>
-          <NavLink to="/my-tasks" className={linkClass}>
-            My tasks
-          </NavLink>
-          <NavLink to="/workspaces" className={linkClass}>
-            Workspaces
-          </NavLink>
-          {user?.is_platform_admin && (
-            <NavLink to="/admin" className={linkClass}>
-              Operator console
+    <div className="flex h-dvh overflow-hidden print:block print:h-auto print:overflow-visible">
+      <aside className="flex h-full w-56 shrink-0 flex-col bg-navy px-3 py-4 print:hidden" data-testid="sidebar">
+        <div className="mb-4 shrink-0 px-3 text-lg font-bold text-white">RCA Dashboard</div>
+        <div className="min-h-0 flex-1 overflow-y-auto" data-testid="sidebar-scroll">
+          <WorkspaceSwitcher />
+          <nav className="flex flex-col gap-1" aria-label="Main">
+            <NavLink to="/dashboard" className={linkClass}>
+              Dashboard
             </NavLink>
-          )}
-          {auditWorkspaces(user).length > 0 && (
-            <NavLink to="/audit" className={linkClass}>
-              Audit log
+            <NavLink to="/rcas" end className={linkClass}>
+              RCA list
             </NavLink>
-          )}
-        </nav>
+            <NavLink to="/my-tasks" className={linkClass}>
+              My tasks
+            </NavLink>
+            <NavLink to="/workspaces" className={linkClass}>
+              Workspaces
+            </NavLink>
+            {user?.is_platform_admin && (
+              <NavLink to="/admin" className={linkClass}>
+                Operator console
+              </NavLink>
+            )}
+            {auditWorkspaces(user).length > 0 && (
+              <NavLink to="/audit" className={linkClass}>
+                Audit log
+              </NavLink>
+            )}
+          </nav>
+        </div>
         {user && (
-          <div className="border-t border-white/20 px-3 pt-3 text-xs text-white/80">
+          <div className="mt-3 shrink-0 border-t border-white/20 px-3 pt-3 text-xs text-white/80">
             <div className="font-semibold text-white" data-testid="current-user">
               {user.name}
             </div>
@@ -83,11 +90,14 @@ export function Layout() {
           </div>
         )}
       </aside>
-      <main className="min-w-0 flex-1 p-6">
-        {user && !user.email_verified && <VerifyBanner email={user.email} />}
-        <BillingAlertBanner />
-        <Outlet />
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col print:block">
+        <Breadcrumbs />
+        <main className="min-h-0 flex-1 overflow-y-auto p-6 print:overflow-visible" data-testid="main-content">
+          {user && !user.email_verified && <VerifyBanner email={user.email} />}
+          <BillingAlertBanner />
+          <Outlet />
+        </main>
+      </div>
     </div>
   );
 }
