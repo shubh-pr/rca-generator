@@ -1,9 +1,11 @@
 import { config } from '../config.js';
 import { logger } from '../lib/logger.js';
 
-/** Scheduled jobs registered by the lifecycle phase (account purge). */
+import { purgeDueAccounts } from '../services/lifecycle.js';
+
+/** Scheduled background jobs (in-process; run on JOBS_INTERVAL_MINUTES). */
 type Job = { name: string; run: () => Promise<unknown> };
-const jobs: Job[] = [];
+const jobs: Job[] = [{ name: 'purge-deleted-accounts', run: () => purgeDueAccounts() }];
 let timer: NodeJS.Timeout | undefined;
 
 export function registerJob(job: Job) {

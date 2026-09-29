@@ -25,6 +25,7 @@
     "@aws-sdk/client-s3": "^3.1142.0",
     "@node-rs/argon2": "^2.2.1",
     "@prisma/client": "^6.19.3",
+    "archiver": "^5.3.2",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -36,10 +37,11 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.0.12",
     "playwright": "^1.63.0",
-    "zod": "^4.6.5",
-    "prisma": "^6.19.3"
+    "prisma": "^6.19.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.4",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

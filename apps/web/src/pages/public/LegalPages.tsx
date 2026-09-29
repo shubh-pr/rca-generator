@@ -93,8 +93,13 @@ export function PrivacyPage() {
       <ul>
         <li>While your account is active.</li>
         <li>When you delete your account, you can no longer log in immediately, and your personal data and files are permanently deleted after the grace period (<Replace>number of days, default 14</Replace>).</li>
-        <li>Backups are overwritten within <Replace>backup retention period</Replace>.</li>
+        <li>Backups are overwritten within <Replace>backup retention period, default 14 days</Replace>.</li>
+        <li>
+          In workspaces owned by other people, the RCA content you contributed stays with that workspace (it is their record), but it is no
+          longer linked to your account; actions you owned there are reassigned to the workspace owner.
+        </li>
       </ul>
+      <p>Your security log (logins, password and email changes, invitations, exports) is visible to you under Account settings.</p>
       <h2>Your rights</h2>
       <p>
         You can access, correct, export (Account settings → Export my data) and delete (Account settings → Delete account) your data at any

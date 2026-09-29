@@ -1,4 +1,4 @@
-import { Link, Navigate } from 'react-router';
+import { Link, Navigate, useSearchParams } from 'react-router';
 import { useAuth } from '../../lib/auth';
 import { PublicLayout } from './PublicLayout';
 
@@ -13,9 +13,15 @@ const FEATURES = [
 
 export function LandingPage() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
   if (user) return <Navigate to="/dashboard" replace />;
   return (
     <PublicLayout>
+      {params.get('deleted') && (
+        <div className="bg-slate-800 px-4 py-2 text-center text-sm text-white" role="status" data-testid="deleted-notice">
+          Your account has been deleted. Your data will be permanently erased after the grace period.
+        </div>
+      )}
       <section className="bg-label">
         <div className="mx-auto grid max-w-5xl items-center gap-8 px-4 py-16 md:grid-cols-2">
           <div className="space-y-4">

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signUpAndVerify, uniqueEmail } from './helpers';
+import { readDownload, signUpAndVerify, STRONG_PASSWORD, uniqueEmail } from './helpers';
 
 test('first login shows the welcome screen; "Create a sample RCA" opens a labelled example that can be deleted', async ({ browser }) => {
   const page = await signUpAndVerify(browser, 'Olive Onboard', uniqueEmail('onboard'));
@@ -47,4 +47,28 @@ test('public pages: landing, terms, privacy and contact are reachable without an
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
     await expect(page.locator('[data-replace-before-launch]').first()).toBeVisible();
   }
+});
+
+test('export my data and delete my account; the account cannot log in afterwards', async ({ browser }) => {
+  const email = uniqueEmail('leaver');
+  const page = await signUpAndVerify(browser, 'Lee Leaver', email);
+  await page.getByRole('button', { name: /Create a sample RCA/ }).click();
+  await expect(page.getByTestId('rca-view')).toBeVisible();
+  await page.goto('/settings');
+  await expect(page.getByTestId('security-log')).toContainText('Logged in');
+  const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download my data' }).click()]);
+  expect(zip.suggestedFilename()).toMatch(/^rca-dashboard-export-.*\.zip$/);
+  expect((await readDownload(zip)).subarray(0, 2).toString()).toBe('PK');
+
+  const section = page.getByTestId('delete-account');
+  await section.getByLabel('Current password').fill(STRONG_PASSWORD);
+  await section.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await section.getByRole('button', { name: 'Delete my account' }).click();
+  await expect(page.getByTestId('deleted-notice')).toBeVisible();
+
+  await page.goto('/login');
+  await page.fill('#email', email);
+  await page.fill('#password', STRONG_PASSWORD);
+  await page.click('button[type=submit]');
+  await expect(page.getByRole('alert')).toContainText('Invalid email or password');
 });
