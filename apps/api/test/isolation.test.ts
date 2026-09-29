@@ -19,6 +19,7 @@ import {
   fillAndSubmitSection,
   raw,
   resetDb,
+  subscribe,
   type Actor,
 } from './helpers.js';
 
@@ -63,7 +64,10 @@ beforeAll(async () => {
   const file = await api().post(`/api/v1/rcas/${r.id}/attachments`).set(bearer(A)).attach('file', Buffer.from(`${MARKER} log`), 'secret.log');
   ids.attachment = file.body.id;
   await api().post(`/api/v1/rcas/${r.id}/submit-review`).set(bearer(A)).send({});
+  await subscribe(A.personalWorkspaceId, 'TEAM', 5); // collaboration is a Team feature
   const inv = await api().post(`/api/v1/rcas/${r.id}/invitations`).set(bearer(A)).send({ email: 'friend-of-a@x.test', role: 'VIEWER' });
+  const checkout = await api().post(`/api/v1/billing/rca/${ids.rca}/checkout`).set(bearer(A)).send({});
+  ids.checkout = checkout.body.session_id;
   ids.invitation = inv.body.id;
   const draft = await createRca(A, A.personalWorkspaceId, { summary: `${MARKER} second` });
   ids.draft = draft.id;
@@ -210,6 +214,30 @@ describe('tenant isolation', () => {
       expectNoLeak(res.text);
       expect(await snapshotA()).toBe(before);
     }
+  });
+
+  it('B gets 404 on A\'s billing endpoints and cannot pay for, subscribe to or view A\'s billing', async () => {
+    const W = A.personalWorkspaceId;
+    const before = await snapshotA();
+    const cases: [string, string, object?][] = [
+      ['post', `/api/v1/billing/rca/${ids.rca}/checkout`, {}],
+      ['get', `/api/v1/billing/workspaces/${W}`],
+      ['get', `/api/v1/billing/workspaces/${W}/history`],
+      ['post', '/api/v1/billing/subscribe', { workspace_id: W, plan: 'TEAM', seats: 3 }],
+      ['post', '/api/v1/billing/portal', { workspace_id: W }],
+      ['post', `/api/v1/billing/mock/portal/${W}`, { action: 'cancel' }],
+      ['get', `/api/v1/billing/mock/sessions/${ids.checkout}`],
+      ['post', `/api/v1/billing/mock/sessions/${ids.checkout}/complete`, { outcome: 'success' }],
+    ];
+    for (const [method, path, body] of cases) {
+      let req = (api() as unknown as Record<string, (p: string) => ReturnType<ReturnType<typeof api>['get']>>)[method](path).set(bearer(B));
+      if (body) req = req.send(body);
+      const res = await req;
+      expect(res.status, `${method} ${path}`).toBe(404);
+      expectNoLeak(res.text);
+    }
+    expect((await api().get('/api/v1/billing/alerts').set(bearer(B))).body.data).toEqual([]);
+    expect(await snapshotA()).toBe(before);
   });
 
   it('B cannot create an RCA inside A\'s workspace', async () => {
