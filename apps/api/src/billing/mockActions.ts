@@ -24,23 +24,26 @@ export async function completeMockCheckout(sessionId: string, userId: string, ou
   if (!s || s.provider !== 'mock' || s.created_by !== userId) throw notFound('Checkout not found');
   if (s.status !== 'OPEN') throw conflict(`This checkout is already ${s.status.toLowerCase()}`);
   const now = new Date();
+  // Event ids derive from the session, so a double click (two requests that both saw OPEN) produces the
+  // same events and the billing_events unique constraint turns the second into a no-op.
+  const eventId = (what: string) => `mock_evt_${s.id}_${what}`;
   const common = { workspaceId: s.workspace_id, checkoutSessionId: s.id, occurredAt: now.toISOString(), amountCents: s.amount_cents, currency: s.currency };
   if (outcome === 'cancel') {
     await unscoped('mock checkout canceled by the buyer', () => prisma.checkoutSession.update({ where: { id: s.id }, data: { status: 'CANCELED', completed_at: now } }));
     return [];
   }
   if (outcome === 'failure') {
-    return emit([{ ...common, id: mockId('evt'), type: 'PAYMENT_FAILED', kind: s.kind as 'RCA_UNLOCK' | 'SUBSCRIPTION', rcaId: s.rca_id ?? undefined, reference: mockId('pi') }]);
+    return emit([{ ...common, id: eventId('failed'), type: 'PAYMENT_FAILED', kind: s.kind as 'RCA_UNLOCK' | 'SUBSCRIPTION', rcaId: s.rca_id ?? undefined, reference: mockId('pi') }]);
   }
   if (s.kind === 'RCA_UNLOCK') {
-    return emit([{ ...common, id: mockId('evt'), type: 'PAYMENT_SUCCEEDED', kind: 'RCA_UNLOCK', rcaId: s.rca_id ?? undefined, reference: mockId('pi') }]);
+    return emit([{ ...common, id: eventId('paid'), type: 'PAYMENT_SUCCEEDED', kind: 'RCA_UNLOCK', rcaId: s.rca_id ?? undefined, reference: mockId('pi') }]);
   }
-  const subscriptionRef = mockId('sub');
+  const subscriptionRef = `mock_sub_${s.id.replace(/-/g, '').slice(0, 24)}`;
   return emit([
-    { ...common, id: mockId('evt'), type: 'PAYMENT_SUCCEEDED', kind: 'SUBSCRIPTION', plan: s.plan as 'SOLO' | 'TEAM', reference: mockId('in') },
+    { ...common, id: eventId('paid'), type: 'PAYMENT_SUCCEEDED', kind: 'SUBSCRIPTION', plan: s.plan as 'SOLO' | 'TEAM', reference: mockId('in') },
     {
       ...common,
-      id: mockId('evt'),
+      id: eventId('activated'),
       type: 'SUBSCRIPTION_ACTIVATED',
       kind: 'SUBSCRIPTION',
       plan: s.plan as 'SOLO' | 'TEAM',
