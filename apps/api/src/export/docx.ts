@@ -16,7 +16,7 @@ import {
   TextRun,
   WidthType,
 } from 'docx';
-import type { ExportModel, KV, TableBlock } from './model.js';
+import { BILLING_WATERMARK_TEXT, type ExportModel, type KV, type TableBlock } from './model.js';
 
 const NAVY = '1F3864';
 const LABEL = 'D9E2F3';
@@ -190,6 +190,9 @@ export async function renderDocx(m: ExportModel): Promise<Buffer> {
                   new TextRun({ text: `\t${m.isDraft ? 'DRAFT' : 'Root Cause Analysis'}`, ...small, bold: m.isDraft, color: m.isDraft ? 'C00000' : NAVY, size: m.isDraft ? 28 : 16 }),
                 ],
               }),
+              ...(m.billingWatermark
+                ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: BILLING_WATERMARK_TEXT, ...small, bold: true, color: '8EA3C6', size: 18 })] })]
+                : []),
             ],
           }),
         },

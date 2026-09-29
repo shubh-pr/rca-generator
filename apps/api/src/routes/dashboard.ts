@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { startOfMonthIst, todayIst, ymd } from '../lib/dates.js';
 import { buildRcaWhere, parseRcaFilters } from '../services/rcaFilters.js';
 import { overdueActionWhere, userRef } from '../services/rcaQueries.js';
+import { cappedRole } from '../policy/access.js';
 
 export const dashboardRouter = Router();
 
@@ -80,10 +81,13 @@ dashboardRouter.get('/dashboard/summary', async (req, res) => {
 dashboardRouter.get('/my-tasks', async (req, res) => {
   const me = currentUser(req);
   const today = todayIst();
-  const [members, collabs] = await Promise.all([
-    prisma.workspaceMember.findMany({ where: { user_id: me.id } }),
-    prisma.rcaCollaborator.findMany({ where: { user_id: me.id } }),
+  const [allMembers, allCollabs] = await Promise.all([
+    prisma.workspaceMember.findMany({ where: { user_id: me.id }, include: { workspace: true } }),
+    prisma.rcaCollaborator.findMany({ where: { user_id: me.id }, include: { rca: { include: { workspace: true } } } }),
   ]);
+  // Read-only collaborators (no active Team subscription) have no section tasks.
+  const members = allMembers.map((m) => ({ ...m, role: cappedRole(m.role, me.id, m.workspace)! }));
+  const collabs = allCollabs.map((c) => ({ ...c, role: cappedRole(c.role, me.id, c.rca.workspace)! }));
   const or: Prisma.RcaTeamSectionWhereInput[] = [];
   const editorWs = members.filter((m) => m.role === 'OWNER' || m.role === 'EDITOR').map((m) => m.workspace_id);
   if (editorWs.length) or.push({ rca: { workspace_id: { in: editorWs } } });

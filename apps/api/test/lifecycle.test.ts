@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closePdfBrowser } from '../src/export/pdf.js';
 import { purgeDueAccounts } from '../src/services/lifecycle.js';
 import { storage } from '../src/storage/index.js';
-import { addMember, api, bearer, createRca, createUser, db, PASSWORD, raw, resetDb, type Actor } from './helpers.js';
+import { addMember, api, bearer, createRca, createUser, db, PASSWORD, raw, resetDb, subscribe, type Actor } from './helpers.js';
 
 const binary = (res: import('superagent').Response, cb: (err: Error | null, body: Buffer) => void) => {
   const chunks: Buffer[] = [];
@@ -72,8 +72,9 @@ describe('account deletion', () => {
     const own = await createRca(u, u.personalWorkspaceId, { summary: 'MY-PRIVATE-RCA' });
     const upload = await api().post(`/api/v1/rcas/${own.id}/attachments`).set(bearer(u)).attach('file', Buffer.from('mine'), 'mine.txt');
     const key = (await raw(() => db.rcaAttachment.findUniqueOrThrow({ where: { id: upload.body.id } }))).file_path!;
-    // u also contributes to someone else's workspace.
+    // u also contributes to someone else's workspace (collaboration needs the owner's Team plan).
     await addMember(other.personalWorkspaceId, u, 'EDITOR');
+    await subscribe(other.personalWorkspaceId, 'TEAM', 3);
     const theirs = await createRca(other, other.personalWorkspaceId);
     const action = await api()
       .post(`/api/v1/rcas/${theirs.id}/sections/DEV/actions`)

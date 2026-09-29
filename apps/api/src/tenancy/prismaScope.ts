@@ -29,6 +29,9 @@ const FILTERS: Record<string, (s: UserScope) => Where> = {
   Workspace: (s) => ({ id: { in: [...s.workspaceIds, ...s.supportWorkspaceIds] } }),
   WorkspaceMember: (s) => ({ OR: [{ workspace_id: { in: [...s.workspaceIds, ...s.supportWorkspaceIds] } }, { user_id: s.userId }] }),
   Invitation: (s) => ({ OR: [{ workspace_id: { in: s.workspaceIds } }, { rca: rcaVisible(s) }] }),
+  CheckoutSession: (s) => ({ workspace_id: { in: s.workspaceIds } }),
+  BillingHistory: (s) => ({ workspace_id: { in: s.workspaceIds } }),
+  BillingEvent: (s) => ({ workspace_id: { in: s.workspaceIds } }),
   AuditLog: (s) => ({
     OR: [
       { rca: rcaVisible(s) },
@@ -111,6 +114,10 @@ async function checkCreate(base: Base, model: string, data: Record<string, unkno
       if (!s.workspaceIds.includes(String(data.workspace_id))) fail();
       return;
     }
+  }
+  if (model === 'CheckoutSession' || model === 'BillingHistory' || model === 'BillingEvent') {
+    if (!s.workspaceIds.includes(String(data.workspace_id))) fail();
+    return;
   }
   if (model === 'RcaWhy' || model === 'RcaAction') {
     const n = await base.rcaTeamSection.count({ where: { id: String(data.section_id), rca: rcaVisible(s) } });

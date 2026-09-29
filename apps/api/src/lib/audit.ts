@@ -14,6 +14,7 @@ export type AuditAction =
   | 'SEND_BACK'
   | 'ASSIGN'
   | 'SUPPORT_ACCESS'
+  | 'BILLING'
   // Security events (category SECURITY)
   | 'SIGNUP'
   | 'LOGIN'

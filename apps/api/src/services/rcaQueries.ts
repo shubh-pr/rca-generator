@@ -3,6 +3,7 @@ import type { Db } from '../db.js';
 import { minutesBetween, todayIst } from '../lib/dates.js';
 import { notFound } from '../lib/errors.js';
 import { permissionFlags, type RcaAccessContext } from '../policy/policy.js';
+import { isSubscribed, needsWatermark } from '../billing/entitlements.js';
 
 export const userRef = { select: { id: true, name: true, email: true } } as const;
 
@@ -23,7 +24,7 @@ export const sectionInclude = {
 } satisfies Prisma.RcaTeamSectionInclude;
 
 export const rcaInclude = {
-  workspace: { select: { id: true, name: true, is_personal: true } },
+  workspace: { select: { id: true, name: true, is_personal: true, owner_id: true, plan: true, subscription_status: true, current_period_end: true, seats: true } },
   timeline: { orderBy: [{ sort_order: 'asc' }, { event_time: 'asc' }] },
   sections: { orderBy: { team: 'asc' }, include: sectionInclude },
   followups: { orderBy: { created_at: 'asc' }, include: { owner: userRef } },
@@ -51,6 +52,12 @@ export function serializeRca(r: FullRca, ctx?: RcaAccessContext) {
   return {
     ...r,
     time_to_detect_minutes: minutesBetween(r.incident_start, r.detected_at),
+    billing: {
+      paid: !!r.paid_at,
+      paid_at: r.paid_at,
+      workspace_subscribed: isSubscribed(r.workspace),
+      watermarked: needsWatermark(r, r.workspace),
+    },
     sections,
     has_overdue: sections.some((s) => s.actions.some((a) => a.is_overdue)),
     // Storage keys never leave the server.

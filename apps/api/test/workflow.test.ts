@@ -193,12 +193,13 @@ describe('follow-ups', () => {
 describe('workspace audit log', () => {
   it('OWNER/EDITOR see their workspace data events; others see nothing', async () => {
     const get = (as: Actor, q = '') => api().get(`/api/v1/audit?${q}`).set(bearer(as));
-    expect((await get(a.OWNER)).body.total).toBe(1);
+    // The RCA creation plus the fixture's Team activation (billing changes are audited too).
+    expect((await get(a.OWNER)).body.data.map((e: { action: string }) => e.action).sort()).toEqual(['BILLING', 'CREATE']);
     expect((await get(a.EDITOR, `rca_id=${rcaId}`)).body.data[0].rca.rca_number).toBe('RCA-2026-0001');
     expect((await get(a.EDITOR, `user_id=${a.DEV.id}`)).body.total).toBe(0);
     expect((await get(a.OWNER, 'date_from=2000-01-01&date_to=2000-01-02')).body.total).toBe(0);
     expect((await get(a.DEV)).body.total).toBe(0);
     expect((await get(a.OUTSIDER)).body.total).toBe(0);
-    expect(await raw(() => db.auditLog.count())).toBe(1);
+    expect(await raw(() => db.auditLog.count())).toBe(2);
   });
 });

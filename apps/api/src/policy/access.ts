@@ -1,4 +1,5 @@
 import type { Team, WorkspaceRole } from '@prisma/client';
+import { hasTeam, type BillingState } from '../billing/entitlements.js';
 import type { Db } from '../db.js';
 import { notFound } from '../lib/errors.js';
 import { currentScope } from '../tenancy/context.js';
@@ -10,6 +11,15 @@ export interface AuthUser {
   email: string;
   email_verified_at: Date | null;
   is_platform_admin: boolean;
+}
+
+/**
+ * Collaboration is a Team feature: without an entitled Team subscription everyone except the
+ * workspace's primary owner is read-only (VIEWER). Nobody is removed (docs/BILLING_PLAN.md).
+ */
+export function cappedRole(role: WorkspaceRole | null, userId: string, ws: BillingState & { owner_id: string }): WorkspaceRole | null {
+  if (!role || userId === ws.owner_id || hasTeam(ws)) return role;
+  return 'VIEWER';
 }
 
 function higher(a: WorkspaceRole | null, b: WorkspaceRole | null): WorkspaceRole | null {
@@ -24,35 +34,43 @@ function higher(a: WorkspaceRole | null, b: WorkspaceRole | null): WorkspaceRole
  */
 export async function loadRcaAccess(db: Db, user: AuthUser, rcaId: string) {
   // The tenant extension already limits this lookup to visible RCAs.
-  const rca = await db.rca.findFirst({ where: { id: rcaId, is_deleted: false } });
+  const rca = await db.rca.findFirst({ where: { id: rcaId, is_deleted: false }, include: { workspace: { select: { owner_id: true, plan: true, subscription_status: true, current_period_end: true, seats: true } } } });
   if (!rca) throw notFound('RCA not found');
   const [member, collaborator] = await Promise.all([
     db.workspaceMember.findFirst({ where: { workspace_id: rca.workspace_id, user_id: user.id } }),
     db.rcaCollaborator.findFirst({ where: { rca_id: rca.id, user_id: user.id } }),
   ]);
-  const role = higher(member?.role ?? null, collaborator?.role ?? null);
+  const fullRole = higher(member?.role ?? null, collaborator?.role ?? null);
+  const role = cappedRole(fullRole, user.id, rca.workspace);
   const scope = currentScope();
   const support = scope?.kind === 'user' && scope.supportWorkspaceIds.includes(rca.workspace_id);
   if (!role && !support) throw notFound('RCA not found');
   const teams = new Set<Team>();
-  if (member?.role === 'CONTRIBUTOR' && member.team) teams.add(member.team);
-  if (collaborator?.role === 'CONTRIBUTOR' && collaborator.team) teams.add(collaborator.team);
+  if (role !== 'VIEWER' || fullRole === 'VIEWER') {
+    if (member?.role === 'CONTRIBUTOR' && member.team) teams.add(member.team);
+    if (collaborator?.role === 'CONTRIBUTOR' && collaborator.team) teams.add(collaborator.team);
+  }
   const ctx: RcaAccessContext = {
     userId: user.id,
     role: role ?? 'VIEWER',
     teams: [...teams],
     isSupport: !role && support,
-    workspaceRole: member?.role ?? null,
+    workspaceRole: cappedRole(member?.role ?? null, user.id, rca.workspace),
+    readOnlyReason: fullRole && role !== fullRole ? ('SUBSCRIPTION_INACTIVE' as const) : null,
   };
   return { rca, ctx };
 }
 
 export type RcaAccess = Awaited<ReturnType<typeof loadRcaAccess>>;
 
-/** The user's role in a workspace, or null. */
+/** The user's effective role in a workspace (after the Team-subscription cap), or null. */
 export async function workspaceRole(db: Db, userId: string, workspaceId: string): Promise<WorkspaceRole | null> {
-  const m = await db.workspaceMember.findFirst({ where: { workspace_id: workspaceId, user_id: userId } });
-  return m?.role ?? null;
+  const [m, ws] = await Promise.all([
+    db.workspaceMember.findFirst({ where: { workspace_id: workspaceId, user_id: userId } }),
+    db.workspace.findFirst({ where: { id: workspaceId } }),
+  ]);
+  if (!m || !ws) return null;
+  return cappedRole(m.role, userId, ws);
 }
 
 /** People who can be picked as action owners, follow-up owners or sign-off assignees on an RCA. */

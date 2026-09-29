@@ -8,6 +8,7 @@ import { parse, zUuid } from '../../lib/validate.js';
 import { authorize } from '../../policy/policy.js';
 import { checkRoleTeam, createInvitation } from '../../services/invitations.js';
 import { rcaOf } from './access.js';
+import { assertCanInvite } from '../../billing/entitlements.js';
 
 /** People invited to this one RCA (not the whole workspace), and their invitations. */
 export const collaboratorsRouter = Router({ mergeParams: true });
@@ -71,6 +72,7 @@ collaboratorsRouter.post('/invitations', async (req, res) => {
   authorize(ctx, 'collaborators.manage', undefined, 'Only workspace owners can invite people to this RCA');
   const body = parse(inviteSchema, req.body);
   checkRoleTeam(body.role, body.team, true);
+  await assertCanInvite(prisma, await prisma.workspace.findUniqueOrThrow({ where: { id: rca.workspace_id } }));
   const inv = await createInvitation(me, { rca_id: rca.id }, body);
   res.status(201).json({ id: inv.id, email: inv.email, role: inv.role, team: inv.team, expires_at: inv.expires_at });
 });

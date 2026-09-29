@@ -19,6 +19,8 @@ export interface RcaAccessContext {
   isSupport: boolean;
   /** The user's role in the RCA's workspace (null for RCA-only collaborators). */
   workspaceRole?: WorkspaceRole | null;
+  /** Set when billing reduced the user's role (collaborators without an active Team subscription). */
+  readOnlyReason?: 'SUBSCRIPTION_INACTIVE' | null;
 }
 
 export type RcaAction =
@@ -127,6 +129,7 @@ export function permissionFlags(
   return {
     role: ctx.role,
     teams: ctx.teams,
+    read_only_reason: ctx.readOnlyReason ?? null,
     support: ctx.isSupport,
     edit: can(ctx, 'rca.edit'),
     delete: can(ctx, 'rca.delete'),
