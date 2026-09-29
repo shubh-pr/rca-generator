@@ -32,7 +32,9 @@ apps/api/                 Express API (npm workspace "@rca/api")
   scripts/run-jobs.ts           Runs the scheduled jobs once (account purge), for an external cron
   src/app.ts              Express app factory (used by server.ts and tests)
   src/server.ts           HTTP entry point
-  src/auth/               ALL auth code: passwords, JWT, sessions, CSRF cookies, rate limits, Google sign-in (google.ts)
+  src/auth/               ALL auth code: passwords, JWT, sessions, CSRF cookies, rate limits
+  src/auth/oauth/         Sign in with Google / Microsoft: providers.ts (endpoints, issuer and email-verified rules),
+                          flow.ts (PKCE + state + nonce, callback, link/unlink routes), identities.ts (user_identities)
   src/tenancy/            Request scope (AsyncLocalStorage) + Prisma extension that filters every tenant query
   src/policy/             policy.ts: can()/authorize() for every action; access.ts: resolves a user's RCA access
   src/lib/                errors, validation helpers, audit, pagination, dates
@@ -57,7 +59,7 @@ apps/web/                 React app (npm workspace "@rca/web")
 apps/web/Caddyfile        Static files, /api proxy, security headers, automatic HTTPS
 ops/backup/               pg_dump backup/restore image; ops/seccomp/chromium.json: Chromium sandbox profile
 .github/workflows/ci.yml  Lint, tests (incl. isolation + S3), e2e, image builds
-docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, BILLING_PLAN.md, STRIPE_SETUP.md, ASSUMPTIONS.md, DEPLOY.md
+docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, BILLING_PLAN.md, STRIPE_SETUP.md, OAUTH_SETUP.md, ASSUMPTIONS.md, DEPLOY.md
 ```
 
 ## Naming conventions

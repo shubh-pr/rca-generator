@@ -10,6 +10,7 @@ A multi-tenant web app for root cause analysis. Anyone can sign up, record an in
 | `docs/B2C_PLAN.md` | Audit, schema and migration plan, permission model |
 | `docs/BILLING_PLAN.md` | Plans, payment provider contract, billing rules |
 | `docs/STRIPE_SETUP.md` | Checklist for switching from the mock provider to Stripe |
+| `docs/OAUTH_SETUP.md` | Setting up Sign in with Google and Microsoft (Google Cloud Console, Microsoft Entra ID) |
 | `docs/ASSUMPTIONS.md` | Every judgement call |
 | `CLAUDE.md` | Structure, conventions and all commands |
 
@@ -81,12 +82,13 @@ Highlights:
 | Collaboration | `collaboration.test.ts`: workspace and RCA invitations, auto-accept after sign-up, members, transfer. |
 | Quotas and hardening | `hardening.test.ts`: quotas, content checks, PDF sandbox never fetches external URLs, headers, admin and support access. |
 | Lifecycle | `lifecycle.test.ts`: deletion rules, purge after the grace period, export zip. `migration.test.ts`: B2C migration up and down on legacy data. |
+| Sign in with Google / Microsoft | `oauth.test.ts`: account creation on first sign-in, linking by verified email, refusal on unverified email (and the Microsoft work-account rule), pre-registration takeover, forged tokens, link from settings, last-method unlink refused. `identityMigration.test.ts`: migration up and down. |
 | Billing | `billing.test.ts`: the 3-RCA bucket, the watermark on every export, webhook idempotency and signatures, the client cannot mark anything paid, invite and seat gating, PAST_DUE/CANCELED behaviour. `stripe.unit.test.ts`: signature checks and event mapping. |
-| End to end | `apps/web/e2e/`: sign up → verify → solo RCA → close → PDF/DOCX; invite a DEV contributor who edits only Dev; team workspace; reset password; onboarding sample RCA; settings; export and delete account; the free bucket, a TEST MODE unlock, Team subscribe and cancel. |
+| End to end | `apps/web/e2e/`: sign up → verify → solo RCA → close → PDF/DOCX; invite a DEV contributor who edits only Dev; team workspace; reset password; onboarding sample RCA; settings; export and delete account; the free bucket, a TEST MODE unlock, Team subscribe and cancel; Sign in with Google / Microsoft against a local fake provider. |
 
 ## Using it
 
-1. **Sign up** and open the link in the verification email.
+1. **Sign up** and open the link in the verification email, or use **Sign in with Google / Microsoft** once configured (`docs/OAUTH_SETUP.md`).
 2. On the **welcome** screen, choose *Create my first RCA*, or *Create a sample RCA* to see a complete, labelled example.
 3. Fill in the tabs: Header, Common, Dev, QA, Production, Closing. Each team tab auto-saves every 60 seconds; submit each section when it is done.
 4. **Submit for review**, sign the five sign-off rows (the team rows first), then **Close RCA**.

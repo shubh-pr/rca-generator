@@ -33,6 +33,13 @@ services:
       STORAGE_DRIVER: local
       UPLOAD_DIR: /data/uploads
       PDF_CHROMIUM_SANDBOX: "false"
+      # Optional sign-in with Google / Microsoft (docs/OAUTH_SETUP.md). Put the values in a root .env
+      # file (git-ignored); the buttons appear only when both values of a provider are set.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT: ${MICROSOFT_TENANT:-common}
     depends_on:
       db:
         condition: service_healthy
