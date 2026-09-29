@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router';
 import { ApiError } from '../api/client';
 import { Field, TextInput } from '../components/Form';
+import { GOOGLE_ERRORS, GoogleButton } from '../components/GoogleButton';
 import { useAuth } from '../lib/auth';
 import { homeFor } from '../lib/permissions';
 import { AuthCard, Notice } from './auth/AuthCard';
@@ -57,6 +58,8 @@ export function LoginPage() {
     >
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {params.get('reset') && <Notice tone="success">Password changed. Log in with your new password.</Notice>}
+        {params.get('error') && <Notice tone="error">{GOOGLE_ERRORS[params.get('error')!] ?? 'Sign-in failed. Please try again.'}</Notice>}
+        <GoogleButton next={next} />
         {error && <Notice tone="error">{error}</Notice>}
         <Field label="Email" htmlFor="email" error={fields.email}>
           <TextInput id="email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />

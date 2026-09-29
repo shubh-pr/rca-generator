@@ -90,6 +90,15 @@ Fill in **every** value in `.env.prod`. The file is commented, and the API valid
 | `BACKUP_*` | See step 7. |
 | `LOG_LEVEL` | `info` by default. Logs are JSON on stdout, without personal data or tokens. |
 
+### Optional: Google sign-in
+
+1. In Google Cloud Console, go to **APIs & Services → OAuth consent screen**. Choose *External*, and enter the app name, support email, your domain and links to your `/privacy` and `/terms` pages. The only scopes needed are `openid`, `email` and `profile`, which need no verification review.
+2. Go to **Credentials → Create credentials → OAuth client ID → Web application**:
+   - Authorized JavaScript origin: `https://rca.example.com`
+   - Authorized redirect URI: `https://rca.example.com/api/v1/auth/google/callback`
+3. Put the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart the api. The "Continue with Google" button appears on the login and sign-up pages.
+4. **Publish** the consent screen (move it out of *Testing*), otherwise only listed test users can sign in.
+
 ## 6. First deploy
 
 ```bash

@@ -137,3 +137,7 @@ The prompt's Phase 1 (schema) and Phase 3 (authorization) cannot be committed se
 | 7 | **Google sign-in** (optional) | OAuth code flow with PKCE. Links to an existing account only if Google reports `email_verified`. |
 
 Every phase ends with lint, unit and API tests, the isolation suite and Playwright passing, then a commit.
+
+## 6. Status
+
+All seven phases are implemented and committed, one commit per phase, including the optional Google sign-in. See `README.md` for the test overview and `docs/DEPLOY.md` for hosting.

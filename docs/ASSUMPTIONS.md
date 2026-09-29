@@ -218,3 +218,12 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 - **Security log.** `GET /me/security-events` and the "Security log" table in Account settings list the user's own security events. They contain the user agent and no IP address.
 - **Cookies.** No consent banner is used, because only strictly necessary cookies are set (`rca_rt` for the session and `rca_csrf` for CSRF protection); there is no analytics or advertising. Adding any non-essential cookie later requires adding a consent notice.
 - **GDPR and DPDP.** Access and portability are covered by the export, rectification by the profile and RCA editing, and erasure by account deletion. The grievance officer or DPO contact, legal bases, processors and transfer safeguards are placeholders in the Privacy Policy that the operator must fill in. They are legal decisions, not code.
+
+## Phase 7: Google sign-in (optional, implemented)
+
+- **Flow.** The server runs the OAuth 2.0 authorization-code flow with PKCE (S256). `state`, the PKCE verifier and the post-login target are kept in a 10-minute httpOnly cookie bound to the browser, which prevents login CSRF and code injection. The redirect URI is `APP_URL/api/v1/auth/google/callback`. The ID token is verified with Google's JWKS (RS256), and the issuer, the audience (our client ID) and the expiry are checked.
+- **Account matching.** A returning user is matched by `google_sub`. An existing account with the same email is linked **only if** Google reports `email_verified: true`; linking also marks the local email verified and applies pending invitations. An unverified Google email is refused. A new user is created with no password, a verified email and a personal workspace, and pending invitations are applied. Deleted or disabled accounts are refused.
+- **Login after Google.** After the callback the server sets the normal refresh and CSRF cookies and redirects to the app, which obtains an access token with the refresh cookie, exactly like a returning visitor.
+- **Accounts without a password.** Users who signed up with Google can set a password later with "Forgot password". Settings hides "Change password" until one exists, and account deletion then asks only for the typed confirmation.
+- **Terms.** Using "Continue with Google" on the sign-up page counts as accepting the Terms; the button says so.
+- **Tests.** They use a locally generated RSA key and mocked Google endpoints. A real Google project is needed only in production (docs/DEPLOY.md).

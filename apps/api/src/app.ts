@@ -3,7 +3,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Router } from 'express';
 import helmet from 'helmet';
-import { accountRouter, authRouter, publicConfigRouter, requireAuth } from './auth/index.js';
+import { accountRouter, authRouter, googleRouter, publicConfigRouter, requireAuth } from './auth/index.js';
 import { config } from './config.js';
 import { prisma } from './db.js';
 import { notFound } from './lib/errors.js';
@@ -83,6 +83,7 @@ export function createApp() {
   });
   api.use(publicConfigRouter);
   api.use(authRouter);
+  api.use(googleRouter);
   api.use(accountRouter);
   api.use(invitationsRouter);
 
