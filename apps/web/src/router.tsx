@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useLocation } from 'react-router';
+import { crumb } from './components/Breadcrumbs';
 import { Layout } from './components/Layout';
+import { RcaCrumb, TabCrumb, WorkspaceCrumb } from './lib/crumbs';
 import { useAuth } from './lib/auth';
 import { auditWorkspaces } from './lib/permissions';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -76,19 +78,44 @@ export const router = createBrowserRouter([
       {
         element: <Layout />,
         children: [
-          { path: 'welcome', element: <WelcomePage /> },
-          { path: 'settings', element: <SettingsPage /> },
-          { path: 'settings/billing', element: <BillingPage /> },
-          { path: 'workspaces', element: <WorkspacesPage /> },
-          { path: 'admin', element: <AdminPage /> },
-          { path: 'workspaces/:wid', element: <WorkspaceDetailPage /> },
-          { path: 'dashboard', element: <DashboardPage /> },
-          { path: 'my-tasks', element: <MyTasksPage /> },
-          { path: 'rcas', element: <RcaListPage /> },
-          { path: 'rcas/new', element: <RcaNewPage /> },
-          { path: 'rcas/:id', element: <RcaViewPage /> },
-          { path: 'rcas/:id/edit', element: <RcaEditPage /> },
-          { path: 'audit', element: <AuditOnly><AuditLogPage /></AuditOnly> },
+          // Breadcrumbs follow this nesting: each route with `handle: crumb(...)` adds a segment (components/Breadcrumbs.tsx).
+          { path: 'welcome', element: <WelcomePage />, handle: crumb('Welcome') },
+          {
+            path: 'settings',
+            handle: crumb('Account settings'),
+            children: [
+              { index: true, element: <SettingsPage /> },
+              { path: 'billing', element: <BillingPage />, handle: crumb('Billing') },
+            ],
+          },
+          {
+            path: 'workspaces',
+            handle: crumb('Workspaces'),
+            children: [
+              { index: true, element: <WorkspacesPage /> },
+              { path: ':wid', element: <WorkspaceDetailPage />, handle: crumb(({ params }) => <WorkspaceCrumb id={params.wid!} />) },
+            ],
+          },
+          { path: 'admin', element: <AdminPage />, handle: crumb('Operator console') },
+          { path: 'dashboard', element: <DashboardPage />, handle: crumb('Dashboard') },
+          { path: 'my-tasks', element: <MyTasksPage />, handle: crumb('My tasks') },
+          {
+            path: 'rcas',
+            handle: crumb('RCAs'),
+            children: [
+              { index: true, element: <RcaListPage /> },
+              { path: 'new', element: <RcaNewPage />, handle: crumb('New RCA') },
+              {
+                path: ':id',
+                handle: crumb(({ params }) => <RcaCrumb id={params.id!} />),
+                children: [
+                  { index: true, element: <RcaViewPage /> },
+                  { path: 'edit', element: <RcaEditPage />, handle: crumb(({ search }) => <TabCrumb tab={search.get('tab')} />) },
+                ],
+              },
+            ],
+          },
+          { path: 'audit', element: <AuditOnly><AuditLogPage /></AuditOnly>, handle: crumb('Audit log') },
           { path: '*', element: <Navigate to="/" replace /> },
         ],
       },
