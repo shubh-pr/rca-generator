@@ -118,7 +118,7 @@ The API refuses to start if only one value of a pair is set, if `OAUTH_REDIRECT_
 1. Open `/login` and `/signup`. **Sign in with Google** and **Sign in with Microsoft** appear above the email form.
 2. Sign up with a new Google account. You land on the welcome screen. In **Account settings → Connected accounts**, Google shows as connected, and **Disconnect Google** is disabled with "This is your only way to sign in".
 3. Set a password there. **Disconnect** becomes available.
-4. With an existing email and password account, click **Sign in with Microsoft** using a personal Microsoft account with the same email. You are signed in to the existing account, and Connected accounts lists Microsoft.
+4. With an existing email and password account, click **Sign in with Microsoft** using a personal Microsoft account with the same email. You are signed in to the existing account, and Connected accounts lists Microsoft. The account's address receives the email "Microsoft account connected to your RCA Dashboard account", and **Security log** shows "Microsoft account linked · matched by verified email" separately from "Logged in with Microsoft". This notice uses the normal email provider (`EMAIL_PROVIDER`), so it only arrives once that is set up (`docs/DEPLOY.md`).
 5. In Account settings, click **Connect Google** or **Connect Microsoft** and pick an account with a *different* email. It is connected, and signing in with it opens this account.
 
 ## F. Troubleshooting
@@ -131,6 +131,7 @@ The API refuses to start if only one value of a pair is set, if `OAUTH_REDIRECT_
 | Microsoft: *AADSTS700016* or *AADSTS50194* | Supported account types do not match `MICROSOFT_TENANT` | Match the table in section C |
 | Microsoft: *AADSTS7000215: Invalid client secret* | The *Secret ID* was copied, or the secret expired | Create a new secret and copy its **Value** (B5) |
 | App: "… did not confirm that this email address is verified" | Google says the email is unverified, or a work account lacks `xms_edov` | Verify the email with the provider, or add the optional claim (B6) |
+| No "account connected" email arrives | Email is not configured, or `EMAIL_PROVIDER=console` (development: the email is printed in the API log) | Set up the email provider (`docs/DEPLOY.md`, step 3) |
 | App: "This email already has a different Google/Microsoft account connected" | The account already has another identity from that provider | Sign in with that one, or disconnect it in Account settings first |
 | The buttons do not appear | One of the two values is missing, or the API was not restarted | Set both values and restart the API |
 
@@ -142,4 +143,5 @@ The rules are recorded in `docs/ASSUMPTIONS.md` under "Sign in with Google and M
 - **New identity, unverified email:** refused, to prevent account takeover.
 - **Several methods per account:** one account can have a password, Google and Microsoft at the same time.
 - **Last method:** the last remaining sign-in method cannot be removed.
+- **Notice on every new link:** each time a Google or Microsoft account is connected to an existing account, whether by verified email or from settings, the account's own address gets an email saying which provider, which provider email and when (UTC and IST), with a link to disconnect it. The Security log records it as "Google account linked" or "Microsoft account linked". A brand-new account, a returning sign-in and a refused attempt send nothing.
 - **In tests:** a local fake provider (`apps/web/e2e/mockOidc.mjs`, enabled by `OAUTH_TEST_PROVIDER_URL`) stands in for both providers, so tests never call Google or Microsoft. Production refuses `OAUTH_TEST_PROVIDER_URL`.

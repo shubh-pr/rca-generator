@@ -276,6 +276,14 @@ Setup: `docs/OAUTH_SETUP.md`. Where the brief was open, the option that best pro
   - The flow cookie is httpOnly, lasts 10 minutes, and is limited to the provider's callback path.
 - **`OAUTH_REDIRECT_BASE_URL`** defaults to `APP_URL` and must have the same origin, because the callback sets the session cookie that the app then uses. It must be https in production.
 - **Terms.** Signing up through a provider counts as accepting the Terms; the text under the buttons says so.
-- **Audit and data export.** Linking and unlinking write the `IDENTITY_LINK` and `IDENTITY_UNLINK` security events, and setting a password writes `PASSWORD_SET`. Connected accounts are included in "Download my data". Identities are deleted with the account (cascade).
+- **No silent links.** Every new identity on an existing account sends the account holder an email at the account's address (template `identity-linked`, same `layout()`/`sendEmail()` pattern as the other account emails). It covers links by verified email and from settings, and says:
+  - which provider and which provider email;
+  - when, in UTC and IST;
+  - how it happened, and whether an unconfirmed password was removed;
+  - how to disconnect it.
+
+  The notice is informational and cannot be turned off. The link itself is not held for confirmation: the provider has already proven control of the address, and that mailbox could reset the password anyway. The email makes a wrong link visible. A new account, a returning sign-in, a refused attempt and re-linking an identity already on the account send nothing.
+- **Audit and data export.** Linking and unlinking write the `IDENTITY_LINK` and `IDENTITY_UNLINK` security events (detail: provider, provider email, `via` = `verified_email` or `settings`, `password_removed`), and setting a password writes `PASSWORD_SET`. The Security log in Account settings labels them per provider ("Google account linked", "Microsoft account disconnected"), separate from "Logged in with Google". Connected accounts are included in "Download my data". Identities are deleted with the account (cascade).
+- **Missing claims are never "verified".** Only an explicit true value counts as verified (`true`, `"true"`, `"1"` or `1`). A missing `email_verified`, or `false`, `"false"`, `null`, `0` or `""`, counts as unverified. For Microsoft, an `email_verified` claim is ignored, because Microsoft does not define it; a work account needs `xms_edov`. A missing `email` claim is refused.
 - **Tests.** API tests run the real flow against the real endpoint URLs with `fetch` mocked. The Playwright tests use a local fake OpenID provider (`apps/web/e2e/mockOidc.mjs`), selected by `OAUTH_TEST_PROVIDER_URL`, which production refuses. No test contacts Google or Microsoft.
 

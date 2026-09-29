@@ -19,6 +19,7 @@ import { z } from 'zod';
 import { config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { notFound } from '../../lib/errors.js';
+import { sendEmail, templates } from '../../email/index.js';
 import { logger } from '../../lib/logger.js';
 import { parse } from '../../lib/validate.js';
 import { unscoped } from '../../tenancy/context.js';
@@ -116,6 +117,16 @@ async function exchangeCode(p: OidcProvider, code: string, verifier: string): Pr
   return ((await res.json()) as { id_token?: string }).id_token ?? null;
 }
 
+/**
+ * A provider identity was attached to an existing account: record it in the security log and tell the
+ * account holder by email (to the account's address), so a link can never go unnoticed.
+ */
+async function identityLinked(req: Request, userId: string, p: OidcProvider, info: { providerEmail: string | null; via: 'settings' | 'verified_email'; passwordRemoved: boolean }) {
+  await securityEvent(userId, 'IDENTITY_LINK', { provider: p.key, provider_email: info.providerEmail, via: info.via, ...(info.passwordRemoved ? { password_removed: true } : {}) }, req);
+  const user = await unscoped('identity link notice', () => prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { name: true, email: true } }));
+  sendEmail(user.email, 'identity-linked', templates.identityLinked(user.name, { provider: p.label, providerEmail: info.providerEmail, at: new Date(), via: info.via, passwordRemoved: info.passwordRemoved }));
+}
+
 // ---------- Routes ----------
 
 export const oauthRouter = Router();
@@ -158,7 +169,7 @@ oauthRouter.get('/auth/:provider/callback', async (req: Request, res: Response) 
       }
       const result = await linkIdentity(userId, p, claims);
       if ('refused' in result) return fail(result.refused);
-      await securityEvent(userId, 'IDENTITY_LINK', { provider: p.key }, req);
+      if (result.newLink) await identityLinked(req, userId, p, { providerEmail: claims.email?.toLowerCase() ?? null, via: 'settings', passwordRemoved: false });
       return res.redirect(`${config.appUrl}/settings?linked=${p.key}`);
     }
 
@@ -167,7 +178,7 @@ oauthRouter.get('/auth/:provider/callback', async (req: Request, res: Response) 
     await unscoped('oauth login bookkeeping', () => prisma.user.update({ where: { id: result.userId }, data: { last_login_at: new Date() } }));
     const session = await createSession(result.userId, req.get('user-agent') ?? undefined);
     setSessionCookies(res, session.refreshToken);
-    if (result.linked && !result.created) await securityEvent(result.userId, 'IDENTITY_LINK', { provider: p.key, by: 'verified_email' }, req);
+    if (result.linked) await identityLinked(req, result.userId, p, { providerEmail: result.email, via: 'verified_email', passwordRemoved: result.passwordRemoved });
     await securityEvent(result.userId, result.created ? 'SIGNUP' : 'LOGIN', { method: p.key }, req);
     // The web app exchanges the refresh cookie for an access token on load.
     res.redirect(`${config.appUrl}${flow.next}`);

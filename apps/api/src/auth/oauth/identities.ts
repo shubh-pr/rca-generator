@@ -12,9 +12,11 @@ import { unscoped } from '../../tenancy/context.js';
 import { revokeAllSessions } from '../sessions.js';
 import type { IdClaims, OidcProvider } from './providers.js';
 
-export type SignInResult = { userId: string; created: boolean; linked: boolean } | { refused: RefusalCode };
+/** `linked`: a new identity was attached to an existing account (the holder is notified). */
+export type SignInResult = { userId: string; created: boolean; linked: boolean; passwordRemoved: boolean; email: string } | { refused: RefusalCode };
 export type RefusalCode = 'email_not_verified' | 'account_unavailable' | 'account_linked_elsewhere';
-export type LinkResult = { ok: true } | { refused: 'identity_linked_elsewhere' | 'provider_already_linked' | 'account_unavailable' };
+/** `newLink` is false when the identity was already linked to this user (nothing changed, no notice). */
+export type LinkResult = { ok: true; newLink: boolean } | { refused: 'identity_linked_elsewhere' | 'provider_already_linked' | 'account_unavailable' };
 
 const unavailable = (u: { deleted_at: Date | null; is_active: boolean }) => !!u.deleted_at || !u.is_active;
 const isUniqueViolation = (err: unknown) => err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
@@ -28,7 +30,7 @@ export async function signInWithIdentity(p: OidcProvider, c: IdClaims, attempt =
       if (known) {
         if (unavailable(known.user)) return { refused: 'account_unavailable' as const };
         await prisma.userIdentity.update({ where: { id: known.id }, data: { last_used_at: new Date() } });
-        return { userId: known.user_id, created: false, linked: false };
+        return { userId: known.user_id, created: false, linked: false, passwordRemoved: false, email: known.email ?? '' };
       }
 
       // A new identity: the email decides which account it belongs to, so it must be verified.
@@ -53,13 +55,13 @@ export async function signInWithIdentity(p: OidcProvider, c: IdClaims, attempt =
           await revokeAllSessions(existing.id);
           await acceptPendingInvitationsFor(existing);
         }
-        return { userId: existing.id, created: false, linked: true };
+        return { userId: existing.id, created: false, linked: true, passwordRemoved: !wasVerified && !!existing.password_hash, email };
       }
 
       const user = await createAccount({ name: (c.name?.trim() || email.split('@')[0]).slice(0, 120), email, password_hash: null, email_verified_at: new Date() });
       await prisma.userIdentity.create({ data: { user_id: user.id, provider: p.db, provider_account_id: c.sub, email, last_used_at: new Date() } });
       await acceptPendingInvitationsFor(user);
-      return { userId: user.id, created: true, linked: true };
+      return { userId: user.id, created: true, linked: false, passwordRemoved: false, email };
     });
   } catch (err) {
     // Two first sign-ins at once: the loser retries and finds what the winner created.
@@ -74,7 +76,7 @@ export async function linkIdentity(userId: string, p: OidcProvider, c: IdClaims)
     const user = await prisma.user.findUnique({ where: { id: userId }, include: { identities: true } });
     if (!user || unavailable(user)) return { refused: 'account_unavailable' as const };
     const owner = await prisma.userIdentity.findUnique({ where: { provider_provider_account_id: { provider: p.db, provider_account_id: c.sub } } });
-    if (owner) return owner.user_id === userId ? { ok: true as const } : { refused: 'identity_linked_elsewhere' as const };
+    if (owner) return owner.user_id === userId ? { ok: true as const, newLink: false } : { refused: 'identity_linked_elsewhere' as const };
     if (user.identities.some((i) => i.provider === p.db)) return { refused: 'provider_already_linked' as const };
     try {
       await prisma.userIdentity.create({ data: { user_id: userId, provider: p.db, provider_account_id: c.sub, email: c.email?.toLowerCase() ?? null } });
@@ -82,7 +84,7 @@ export async function linkIdentity(userId: string, p: OidcProvider, c: IdClaims)
       if (isUniqueViolation(err)) return { refused: 'identity_linked_elsewhere' as const };
       throw err;
     }
-    return { ok: true as const };
+    return { ok: true as const, newLink: true };
   });
 }
 

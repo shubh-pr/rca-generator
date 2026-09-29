@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createSession } from '../src/auth/sessions.js';
 import { MICROSOFT_CONSUMER_TENANT } from '../src/auth/oauth/providers.js';
 import { config } from '../src/config.js';
+import { ConsoleEmailProvider, emailProvider, flushEmails } from '../src/email/index.js';
 import { api, bearer, createUser, db, PASSWORD, raw, resetDb } from './helpers.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -92,8 +93,15 @@ const signIn = (key: Key, claims: Record<string, unknown>, opts?: Parameters<typ
 const user = (email: string) => raw(() => db.user.findUnique({ where: { email }, include: { identities: true } }));
 const tokenFor = async (userId: string) => (await createSession(userId, 'vitest')).accessToken;
 
+const outbox = () => (emailProvider() as ConsoleEmailProvider).outbox;
+const linkNotices = async (to?: string) => {
+  await flushEmails();
+  return outbox().filter((m) => m.template === 'identity-linked' && (!to || m.to === to));
+};
+
 beforeEach(async () => {
   await resetDb();
+  outbox().length = 0;
   signOpts = {};
   config.oauth.google.clientId = P.google.clientId;
   config.oauth.google.clientSecret = 'google-secret';
@@ -312,3 +320,90 @@ describe('Connected accounts: link and unlink', () => {
     expect(await raw(() => db.userIdentity.count({ where: { user_id: u.id } }))).toBe(1);
   });
 });
+
+describe('missing or non-true verification claims are treated as unverified (never verified by default)', () => {
+  it('Google: a token that omits email_verified entirely refuses to auto-link and creates nothing', async () => {
+    const existing = await createUser('Existing', { email: 'target@x.test' });
+    tokenClaims = () => ({});
+    // No email_verified key at all in the signed token.
+    const res = await signIn('google', { sub: 'g-no-claim', email: 'target@x.test' });
+    expect(res.headers.location).toBe(`${config.appUrl}/login?error=email_not_verified&provider=google`);
+    expect(cookiesOf(res)).not.toContain('rca_rt=');
+    expect((await user('target@x.test'))!.identities).toHaveLength(0);
+    expect((await user('target@x.test'))!.id).toBe(existing.id);
+    const fresh = await signIn('google', { sub: 'g-no-claim-2', email: 'fresh@x.test' });
+    expect(fresh.headers.location).toContain('error=email_not_verified');
+    expect(await user('fresh@x.test')).toBeNull();
+    expect(await raw(() => db.userIdentity.count())).toBe(0);
+  });
+
+  it.each([['false'], [null], [0], [''], ['yes'], [{}]])('Google: email_verified = %j is not verified', async (value) => {
+    await createUser('Existing', { email: 'target@x.test' });
+    const res = await signIn('google', { sub: 'g-odd', email: 'target@x.test', email_verified: value });
+    expect(res.headers.location).toContain('error=email_not_verified');
+    expect(await raw(() => db.userIdentity.count())).toBe(0);
+  });
+
+  it('Microsoft work account: no xms_edov, xms_edov false, or an email_verified claim (which Microsoft does not define) are all unverified', async () => {
+    await createUser('Existing', { email: 'target@contoso.test' });
+    const work = { ...P.microsoft.unverified(), email: 'target@contoso.test' };
+    for (const extra of [{}, { xms_edov: false }, { xms_edov: 'false' }, { email_verified: true }]) {
+      const res = await signIn('microsoft', { ...work, sub: `ms-${JSON.stringify(extra)}`, ...extra });
+      expect(res.headers.location, JSON.stringify(extra)).toContain('error=email_not_verified');
+    }
+    expect(await raw(() => db.userIdentity.count())).toBe(0);
+  });
+
+  it.each(['google', 'microsoft'] as Key[])('%s: a token without an email claim is refused', async (key) => {
+    const res = await signIn(key, { sub: `${key}-no-email`, ...P[key].verified() });
+    expect(res.headers.location).toContain('error=email_not_verified');
+    expect(await raw(() => db.user.count())).toBe(0);
+  });
+});
+
+describe('the account holder is notified of every new sign-in method', () => {
+  it.each(['google', 'microsoft'] as Key[])('%s linked by verified email: email to the account address naming the provider and time; distinct security event', async (key) => {
+    const existing = await createUser('Holder', { email: 'holder@x.test' });
+    await signIn(key, { sub: `${key}-h`, email: 'holder@x.test', ...P[key].verified() });
+    const [notice, ...more] = await linkNotices();
+    expect(more).toHaveLength(0);
+    expect(notice.to).toBe('holder@x.test');
+    const label = key === 'google' ? 'Google' : 'Microsoft';
+    expect(notice.subject).toBe(`${label} account connected to your RCA Dashboard account`);
+    expect(notice.text).toContain(`A ${label} account (holder@x.test) was connected to your account on`);
+    expect(notice.text).toMatch(/on \d{1,2} [A-Z][a-z]{2,3} \d{4}, \d{2}:\d{2} UTC \(\d{2}:\d{2} IST\)/);
+    expect(notice.text).toContain(`because ${label} confirmed that they control this email address`);
+    expect(notice.text).toContain(`${config.appUrl}/settings`);
+    const events = await raw(() => db.auditLog.findMany({ where: { entity_id: existing.id, category: 'SECURITY' }, orderBy: { at: 'asc' } }));
+    expect(events.map((e) => e.action)).toEqual(['IDENTITY_LINK', 'LOGIN']);
+    expect(events[0].new_value).toMatchObject({ provider: key, provider_email: 'holder@x.test', via: 'verified_email' });
+  });
+
+  it('linked from Account settings: the notice goes to the account address (not the provider email) and says so', async () => {
+    const me = await createUser('Setter', { email: 'setter@x.test' });
+    await signIn('microsoft', { sub: 'm-set', email: 'setter.personal@outlook.test' }, { linkAs: me.token });
+    const [notice] = await linkNotices();
+    expect(notice.to).toBe('setter@x.test');
+    expect(notice.text).toContain('A Microsoft account (setter.personal@outlook.test) was connected');
+    expect(notice.text).toContain('It was connected from Account settings');
+    // Linking the same identity again changes nothing and sends nothing.
+    await signIn('microsoft', { sub: 'm-set', email: 'setter.personal@outlook.test' }, { linkAs: me.token });
+    expect(await linkNotices()).toHaveLength(1);
+  });
+
+  it('pre-registration case: the notice says the unconfirmed password was removed', async () => {
+    await createUser('Squat', { email: 'claimed@x.test', verified: false });
+    await signIn('google', { sub: 'g-claimed', email: 'claimed@x.test', email_verified: true });
+    const [notice] = await linkNotices('claimed@x.test');
+    expect(notice.text).toContain('the password that was set on this account has been removed');
+  });
+
+  it('no notice for a brand-new account, a returning sign-in, or a refused attempt', async () => {
+    await signIn('google', { sub: 'g-brand-new', email: 'new@x.test', email_verified: true });
+    await signIn('google', { sub: 'g-brand-new', email: 'new@x.test', email_verified: true });
+    await createUser('Victim', { email: 'victim@x.test' });
+    await signIn('google', { sub: 'g-bad', email: 'victim@x.test', email_verified: false });
+    expect(await linkNotices()).toHaveLength(0);
+  });
+});
+

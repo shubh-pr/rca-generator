@@ -77,6 +77,33 @@ interface SecurityEvent {
   new_value: Record<string, unknown> | null;
 }
 
+const PROVIDER_NAME: Record<string, string> = { google: 'Google', microsoft: 'Microsoft' };
+
+/** Sign-in-method events are labelled per provider, apart from ordinary logins ("Google account linked"). */
+export function eventLabel(e: Pick<SecurityEvent, 'action' | 'new_value'>): { label: string; detail?: string } {
+  const v = e.new_value ?? {};
+  const provider = PROVIDER_NAME[String(v.provider ?? v.method ?? '')];
+  switch (e.action) {
+    case 'IDENTITY_LINK':
+      return {
+        label: `${provider ?? 'Sign-in'} account linked`,
+        detail: [v.provider_email, v.via === 'settings' ? 'from Account settings' : v.via === 'verified_email' ? 'matched by verified email' : null, v.password_removed ? 'unconfirmed password removed' : null]
+          .filter(Boolean)
+          .join(' · '),
+      };
+    case 'IDENTITY_UNLINK':
+      return { label: `${provider ?? 'Sign-in'} account disconnected` };
+    case 'PASSWORD_SET':
+      return { label: 'Password set' };
+    case 'LOGIN':
+      return { label: provider ? `Logged in with ${provider}` : 'Logged in' };
+    case 'SIGNUP':
+      return { label: provider ? `Account created with ${provider}` : 'Account created' };
+    default:
+      return { label: EVENT_LABEL[e.action] ?? e.action };
+  }
+}
+
 function SecurityLog() {
   const [page, setPage] = useState(1);
   const q = useQuery({ queryKey: ['security-events', page], queryFn: () => api.get<Paged<SecurityEvent>>('/me/security-events', { page, page_size: 20 }) });
@@ -96,7 +123,10 @@ function SecurityLog() {
           {q.data?.data.map((e) => (
             <tr key={e.id}>
               <td className="whitespace-nowrap">{formatDateTime(e.at)}</td>
-              <td>{EVENT_LABEL[e.action] ?? e.action}</td>
+              <td data-testid="security-event">
+                {eventLabel(e).label}
+                {eventLabel(e).detail && <div className="text-xs text-slate-500">{eventLabel(e).detail}</div>}
+              </td>
               <td className="max-w-xs truncate text-xs text-slate-500">{String(e.new_value?.user_agent ?? '')}</td>
             </tr>
           ))}

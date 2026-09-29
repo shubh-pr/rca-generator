@@ -3,7 +3,7 @@
  * the full redirect flow (start → provider page → callback → session) without calling Google or Microsoft.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
-import { signUpAndVerify, STRONG_PASSWORD, uniqueEmail } from './helpers';
+import { mailTo, signUpAndVerify, STRONG_PASSWORD, uniqueEmail } from './helpers';
 
 type Account = { email: string; sub: string; name?: string; verified?: boolean; msAccount?: 'personal' | 'work' | 'work_edov' };
 
@@ -94,6 +94,14 @@ test('an existing email+password account signs in with Microsoft (verified perso
   await expect(method(page, 'password')).toContainText('Password set');
   // With two methods, either can be disconnected.
   await expect(method(page, 'microsoft').getByRole('button', { name: 'Disconnect Microsoft' })).toBeEnabled();
+
+  // The account holder is told, and the security log names the provider apart from the login.
+  const notice = await mailTo(email, 'identity-linked');
+  expect(notice.subject).toBe('Microsoft account connected to your RCA Dashboard account');
+  expect(notice.text).toContain(`A Microsoft account (${email}) was connected to your account on`);
+  const log = page.getByTestId('security-log');
+  await expect(log.getByTestId('security-event').filter({ hasText: 'Microsoft account linked' })).toContainText('matched by verified email');
+  await expect(log.getByTestId('security-event').filter({ hasText: 'Logged in with Microsoft' })).toHaveCount(1);
 });
 
 test('unverified provider emails are refused with a clear message and no session (Google unverified, Microsoft work account without verified domain)', async ({ browser }) => {
@@ -131,6 +139,10 @@ test('connect Google from Account settings (different email), then sign in with 
   await expect(page).toHaveURL(/\/settings\?linked=google/);
   await expect(page.getByText('Google is connected')).toBeVisible();
   await expect(method(page, 'google')).toContainText(`Connected as ${googleEmail}`);
+  const notice = await mailTo(email, 'identity-linked');
+  expect(notice.text).toContain(`A Google account (${googleEmail}) was connected`);
+  expect(notice.text).toContain('It was connected from Account settings');
+  await expect(page.getByTestId('security-log').getByTestId('security-event').filter({ hasText: 'Google account linked' })).toContainText('from Account settings');
 
   await logOut(page);
   await providerSignIn(page, '/login', 'google', { email: googleEmail, sub: `g-${googleEmail}` });
