@@ -7,6 +7,7 @@ import { sendEmail, templates } from '../email/index.js';
 import { badRequest, conflict, HttpError, unauthorized } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
 import { createAccount } from '../services/accounts.js';
+import { acceptPendingInvitationsFor } from '../services/invitations.js';
 import { unscoped } from '../tenancy/context.js';
 import { verifyCaptcha } from './captcha.js';
 import { clearSessionCookies, REFRESH_COOKIE, requireCsrf, setSessionCookies } from './cookies.js';
@@ -83,7 +84,9 @@ authRouter.post('/auth/verify-email', async (req, res) => {
   }
   await users(() => prisma.user.update({ where: { id: row.user_id }, data: { email_verified_at: row.user.email_verified_at ?? new Date() } }));
   await securityEvent(row.user_id, 'EMAIL_VERIFIED');
-  res.json({ verified: true });
+  // Invitations sent to this address before the account existed now apply automatically.
+  const accepted = await acceptPendingInvitationsFor(row.user);
+  res.json({ verified: true, ...(accepted ? { invitations_accepted: accepted } : {}) });
 });
 
 const emailOnly = z.object({ email: zEmail, captcha_token: z.string().max(4096).optional() });

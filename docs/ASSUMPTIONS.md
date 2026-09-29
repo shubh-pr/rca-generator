@@ -156,3 +156,23 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 - **Legal and contact pages.** Terms, Privacy and Contact are structured drafts written with GDPR and the India DPDP Act 2023 in mind. Every legal detail is a highlighted `[REPLACE BEFORE LAUNCH: …]` marker that must be filled before going public.
 - **Cookie notice.** No cookie banner is shown, because only essential sign-in cookies are used (`rca_rt` and `rca_csrf`) and there is no analytics or advertising. The site footer says so.
 - **Landing page.** It uses dashed placeholder boxes instead of real screenshots.
+
+## Phase 4: collaboration
+
+- **Who can invite.**
+  - Workspace invitations: only workspace OWNERs can invite, revoke and manage members.
+  - RCA invitations: only OWNERs of the RCA's workspace can invite to an RCA. An EDITOR or a direct RCA collaborator cannot.
+  - Direct RCA invitations may grant EDITOR, CONTRIBUTOR or VIEWER, but not OWNER.
+- **Contributor teams.** A CONTRIBUTOR invited to one RCA must be given a team. A workspace-level contributor may have a default team (every RCA in the workspace) or none (access per RCA only).
+- **Accepting.** An invitation can only be accepted by a verified account whose email matches the invited address, because the link could be forwarded. A new user signs up with that address; when they verify it, every pending invitation for the address is applied automatically. Invitations expire after 7 days, are single-use, can be revoked, and are stored as hashes.
+- **Re-inviting and existing access.** Re-inviting the same address to the same target replaces the pending invitation. Inviting someone who already has access returns 409.
+- **Invitation content.** The invitation email and the public lookup (`GET /invitations/lookup`) show the inviter's name, the role, the team and a masked email. They never show the RCA or workspace name or any RCA content.
+- **Protected owners.** A workspace always keeps at least one OWNER. The primary owner (whose quota the workspace uses) cannot be demoted or removed until they transfer primary ownership to another member.
+- **Leaving and removal.** Members may leave a workspace themselves. When a member or collaborator is removed, unsigned sign-off rows assigned to them go back to "any owner or editor".
+- **Workspaces.**
+  - Users can create shared team workspaces, and rename and delete them.
+  - Deleting a workspace requires typing its name and permanently removes every RCA, file and audit row in it.
+  - A personal workspace cannot be deleted on its own; it goes with the account.
+  - A personal workspace keeps a single OWNER and cannot be transferred.
+- **Last edited by.** Each team section shows who last edited it (`updated_by` and `updated_at`), in the tab header and in the read-only view.
+- **Security events.** INVITE, INVITE_ACCEPT, INVITE_REVOKE, MEMBER_REMOVE and ROLE_CHANGE are stored as SECURITY events of the acting user.

@@ -63,6 +63,8 @@ beforeAll(async () => {
   const file = await api().post(`/api/v1/rcas/${r.id}/attachments`).set(bearer(A)).attach('file', Buffer.from(`${MARKER} log`), 'secret.log');
   ids.attachment = file.body.id;
   await api().post(`/api/v1/rcas/${r.id}/submit-review`).set(bearer(A)).send({});
+  const inv = await api().post(`/api/v1/rcas/${r.id}/invitations`).set(bearer(A)).send({ email: 'friend-of-a@x.test', role: 'VIEWER' });
+  ids.invitation = inv.body.id;
   const draft = await createRca(A, A.personalWorkspaceId, { summary: `${MARKER} second` });
   ids.draft = draft.id;
   // B has data of their own, so B's lists are not trivially empty.
@@ -106,6 +108,12 @@ const PER_RCA: Case[] = [
   { method: 'get', route: 'GET /audit', path: () => `${R()}/audit` },
   { method: 'get', route: 'GET /print', path: () => `${R()}/print` },
   { method: 'get', route: 'GET /export', path: () => `${R()}/export?format=pdf` },
+  { method: 'get', route: 'GET /collaborators', path: () => `${R()}/collaborators` },
+  { method: 'patch', route: 'PATCH /collaborators/:uid', path: () => `${R()}/collaborators/${A.id}`, body: () => ({ role: 'VIEWER' }) },
+  { method: 'delete', route: 'DELETE /collaborators/:uid', path: () => `${R()}/collaborators/${A.id}` },
+  { method: 'get', route: 'GET /invitations', path: () => `${R()}/invitations` },
+  { method: 'post', route: 'POST /invitations', path: () => `${R()}/invitations`, body: () => ({ email: 'b-friend@x.test', role: 'EDITOR' }) },
+  { method: 'delete', route: 'DELETE /invitations/:iid', path: () => `${R()}/invitations/${ids.invitation}` },
 ];
 
 /** Method + path of every route registered on rcaRouter (including nested routers). */
@@ -177,6 +185,31 @@ describe('tenant isolation', () => {
     const labels = await api().get(`/api/v1/workspaces/${A.personalWorkspaceId}/labels`).set(bearer(B));
     expect(labels.status).toBe(404);
     expectNoLeak(labels.text);
+  });
+
+  it('B gets 404 on every endpoint of A\'s workspace', async () => {
+    const W = `/api/v1/workspaces/${A.personalWorkspaceId}`;
+    const cases: [string, string, object?][] = [
+      ['get', `${W}/members`],
+      ['patch', `${W}/members/${A.id}`, { role: 'VIEWER' }],
+      ['delete', `${W}/members/${A.id}`],
+      ['post', `${W}/transfer`, { user_id: B.id }],
+      ['get', `${W}/invitations`],
+      ['post', `${W}/invitations`, { email: 'b-friend@x.test', role: 'OWNER' }],
+      ['delete', `${W}/invitations/${ids.invitation}`],
+      ['patch', W, { name: 'pwned' }],
+      ['delete', W, { confirm_name: "Alice Alpha's workspace" }],
+      ['get', `${W}/labels`],
+    ];
+    for (const [method, path, body] of cases) {
+      const before = await snapshotA();
+      let req = (api() as unknown as Record<string, (p: string) => ReturnType<ReturnType<typeof api>['get']>>)[method](path).set(bearer(B));
+      if (body) req = req.send(body);
+      const res = await req;
+      expect(res.status, `${method} ${path}`).toBe(404);
+      expectNoLeak(res.text);
+      expect(await snapshotA()).toBe(before);
+    }
   });
 
   it('B cannot create an RCA inside A\'s workspace', async () => {

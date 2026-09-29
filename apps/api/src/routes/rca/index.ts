@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { rcaAccessMiddleware } from './access.js';
 import { attachmentsRouter } from './attachments.js';
+import { collaboratorsRouter } from './collaborators.js';
 import { rcaAuditRouter } from './audit.js';
 import { coreRouter } from './core.js';
 import { rcaExportsRouter } from './exports.js';
@@ -23,5 +24,6 @@ rcaRouter.use(followupsRouter);
 rcaRouter.use(attachmentsRouter);
 rcaRouter.use(rcaAuditRouter);
 rcaRouter.use(rcaExportsRouter);
+rcaRouter.use(collaboratorsRouter);
 
 export { rcaAccessMiddleware };

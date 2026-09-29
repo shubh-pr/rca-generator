@@ -20,6 +20,6 @@ export async function purgeWorkspace(tx: Tx, workspaceId: string): Promise<{ rca
 }
 
 /** Remove stored files after the database transaction committed. */
-export function removeStoredFiles(keys: string[]) {
+export async function removeStoredFiles(keys: string[]) {
   for (const key of keys) fs.rmSync(path.join(config.uploadDir, path.basename(key)), { force: true });
 }

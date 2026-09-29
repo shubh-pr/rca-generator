@@ -37,6 +37,11 @@ describe('policy (docs/B2C_PLAN.md section 4)', () => {
     expect(can(s, 'audit.view')).toBe(true);
     for (const a of ['rca.export', 'rca.edit', 'attachment.add', 'signoff.sign'] as RcaAction[]) expect(can(s, a), a).toBe(false);
   });
+  it('managing RCA collaborators needs OWNER of the RCA\'s workspace', () => {
+    expect(can({ ...ctx('OWNER'), workspaceRole: 'OWNER' }, 'collaborators.manage')).toBe(true);
+    expect(can({ ...ctx('OWNER'), workspaceRole: null }, 'collaborators.manage')).toBe(false); // RCA-level owner only
+    expect(can({ ...ctx('EDITOR'), workspaceRole: 'EDITOR' }, 'collaborators.manage')).toBe(false);
+  });
   it('workspace actions', () => {
     expect(ROLES.filter((r) => canInWorkspace(r, 'rca.create'))).toEqual(['OWNER', 'EDITOR']);
     expect(ROLES.filter((r) => canInWorkspace(r, 'members.manage'))).toEqual(['OWNER']);

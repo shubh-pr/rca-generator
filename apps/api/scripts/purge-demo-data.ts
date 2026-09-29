@@ -28,7 +28,7 @@ export async function purgeDemoData(confirm: boolean, log: (s: string) => void =
       // Rows in other tenants' data keep working with the user reference nulled by the FKs.
       await tx.user.deleteMany({ where: { id: { in: users.map((u) => u.id) } } });
     });
-    removeStoredFiles(files);
+    await removeStoredFiles(files);
     log(`Deleted ${users.length} users, ${workspaces.length} workspaces, ${rcas} RCAs, ${files.length} files.`);
     return { deleted: true, users: users.length, workspaces: workspaces.length, rcas };
   });

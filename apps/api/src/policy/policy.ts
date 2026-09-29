@@ -17,6 +17,8 @@ export interface RcaAccessContext {
   teams: Team[];
   /** True when the access comes only from a platform-admin support grant. */
   isSupport: boolean;
+  /** The user's role in the RCA's workspace (null for RCA-only collaborators). */
+  workspaceRole?: WorkspaceRole | null;
 }
 
 export type RcaAction =
@@ -37,7 +39,8 @@ export type RcaAction =
   | 'signoff.sign'
   | 'signoff.assign'
   | 'audit.view'
-  | 'collaborators.view';
+  | 'collaborators.view'
+  | 'collaborators.manage';
 
 export interface Resource {
   team?: Team;
@@ -75,6 +78,9 @@ export function can(ctx: RcaAccessContext, action: RcaAction, resource: Resource
     case 'attachment.delete':
       if (atLeast(ctx, 'EDITOR')) return true;
       return ctx.role === 'CONTRIBUTOR' && !!resource.uploaded_by && resource.uploaded_by === ctx.userId;
+    case 'collaborators.manage':
+      // Inviting people to an RCA is for owners of the RCA's workspace (SPEC_B2C: "a workspace owner can invite").
+      return ctx.workspaceRole === 'OWNER';
     case 'signoff.sign':
       if (resource.assignee_user_id) return resource.assignee_user_id === ctx.userId;
       return atLeast(ctx, 'EDITOR');
@@ -134,6 +140,7 @@ export function permissionFlags(
     add_attachment: can(ctx, 'attachment.add'),
     assign_signoff: can(ctx, 'signoff.assign'),
     export: can(ctx, 'rca.export'),
+    manage_collaborators: can(ctx, 'collaborators.manage'),
     edit_section: Object.fromEntries(teams.map((t) => [t, can(ctx, 'section.edit', { team: t })])) as Record<Team, boolean>,
     sign: Object.fromEntries(signoffs.map((s) => [s.role, can(ctx, 'signoff.sign', s)])) as Record<SignoffRole, boolean>,
     delete_attachment: Object.fromEntries(attachments.map((a) => [a.id, can(ctx, 'attachment.delete', a)])) as Record<string, boolean>,

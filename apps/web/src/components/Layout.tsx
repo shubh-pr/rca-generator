@@ -50,6 +50,9 @@ export function Layout() {
           <NavLink to="/my-tasks" className={linkClass}>
             My tasks
           </NavLink>
+          <NavLink to="/workspaces" className={linkClass}>
+            Workspaces
+          </NavLink>
           {auditWorkspaces(user).length > 0 && (
             <NavLink to="/audit" className={linkClass}>
               Audit log

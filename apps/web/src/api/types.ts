@@ -185,6 +185,7 @@ export interface RcaPermissions {
   add_attachment: boolean;
   assign_signoff: boolean;
   export: boolean;
+  manage_collaborators: boolean;
   edit_section: Record<Team, boolean>;
   sign: Record<SignoffRole, boolean>;
   delete_attachment: Record<string, boolean>;
@@ -232,4 +233,22 @@ export interface AuditEntry {
   user: UserRef | null;
   rca: { id: string; rca_number: string } | null;
   at: string;
+}
+
+export interface Member {
+  user_id: string;
+  name: string;
+  email: string;
+  role: WorkspaceRole;
+  team: Team | null;
+  is_primary_owner?: boolean;
+}
+
+export interface PendingInvitation {
+  id: string;
+  email: string;
+  role: WorkspaceRole;
+  team: Team | null;
+  expires_at: string;
+  created_at: string;
 }

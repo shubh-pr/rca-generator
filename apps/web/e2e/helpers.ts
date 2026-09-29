@@ -91,11 +91,14 @@ export const uniqueEmail = (prefix: string) => `${prefix}.${Date.now()}.${Math.f
 export const STRONG_PASSWORD = 'Harbour-Lantern-Forty-2';
 
 /** Sign up through the UI and verify through the emailed link; returns a logged-in page. */
-export async function signUpAndVerify(browser: Browser, name: string, email: string, password = STRONG_PASSWORD): Promise<Page> {
+export async function signUpAndVerify(browser: Browser, name: string, email: string, password = STRONG_PASSWORD, startAt?: (page: Page) => Promise<void>): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
   page.on('dialog', (d) => d.accept());
-  await page.goto('/');
-  await page.getByTestId('cta-signup').click();
+  if (startAt) await startAt(page);
+  else {
+    await page.goto('/');
+    await page.getByTestId('cta-signup').click();
+  }
   await page.fill('#name', name);
   await page.fill('#email', email);
   await page.fill('#password', password);

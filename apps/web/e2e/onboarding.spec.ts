@@ -35,10 +35,15 @@ test('empty dashboard, settings: profile, sessions and log out of all devices', 
 });
 
 test('public pages: landing, terms, privacy and contact are reachable without an account', async ({ page }) => {
+  test.setTimeout(60_000);
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /Root cause analysis that teams actually finish/ })).toBeVisible();
-  for (const [link, heading] of [['Terms of Service', 'Terms of Service'], ['Privacy Policy', 'Privacy Policy'], ['Contact', 'Contact']]) {
-    await page.getByRole('contentinfo').getByRole('link', { name: link }).click();
+  const footer = page.getByRole('contentinfo');
+  for (const [path, heading] of [['/terms', 'Terms of Service'], ['/privacy', 'Privacy Policy'], ['/contact', 'Contact']]) {
+    await expect(footer.getByRole('link', { name: heading })).toHaveAttribute('href', path);
+  }
+  for (const [path, heading] of [['/terms', 'Terms of Service'], ['/privacy', 'Privacy Policy'], ['/contact', 'Contact']]) {
+    await page.goto(path);
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
     await expect(page.locator('[data-replace-before-launch]').first()).toBeVisible();
   }

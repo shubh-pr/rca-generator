@@ -14,6 +14,8 @@ import { ContactPage, PrivacyPage, TermsPage } from './pages/public/LegalPages';
 import { LandingPage } from './pages/public/LandingPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WelcomePage } from './pages/WelcomePage';
+import { InvitePage } from './pages/InvitePage';
+import { WorkspaceDetailPage, WorkspacesPage } from './pages/WorkspacesPage';
 import { MyTasksPage } from './pages/MyTasksPage';
 import { RcaEditPage } from './pages/rca/RcaEditPage';
 import { RcaListPage } from './pages/rca/RcaListPage';
@@ -56,6 +58,7 @@ export const router = createBrowserRouter([
       { path: '/verify-email', element: <VerifyEmailPage /> },
       { path: '/forgot-password', element: <ForgotPasswordPage /> },
       { path: '/reset-password', element: <ResetPasswordPage /> },
+      { path: '/invite', element: <InvitePage /> },
     ],
   },
   {
@@ -67,6 +70,8 @@ export const router = createBrowserRouter([
         children: [
           { path: 'welcome', element: <WelcomePage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'workspaces', element: <WorkspacesPage /> },
+          { path: 'workspaces/:wid', element: <WorkspaceDetailPage /> },
           { path: 'dashboard', element: <DashboardPage /> },
           { path: 'my-tasks', element: <MyTasksPage /> },
           { path: 'rcas', element: <RcaListPage /> },

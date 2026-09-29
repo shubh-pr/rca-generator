@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { api } from '../api/client';
-import type { AuditEntry, Paged } from '../api/types';
+import type { AuditEntry, Member, Paged } from '../api/types';
 import { ErrorBanner, Pagination, Select, TextInput } from '../components/Form';
 import { useWorkspace } from '../lib/workspace';
 import { formatDateTime } from '../lib/dates';
@@ -12,8 +12,13 @@ const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'SUBMIT', 'SEND_BACK', 'SIGN', 'C
 
 /** Audit log screen: filter by RCA, user and date (Owner and Admin). */
 export function AuditLogPage() {
-  const { filter } = useWorkspace();
-  const [f, setF] = useState({ rca_number: '', action: '', date_from: '', date_to: '' });
+  const { filter, current } = useWorkspace();
+  const [f, setF] = useState({ rca_number: '', user_id: '', action: '', date_from: '', date_to: '' });
+  const members = useQuery({
+    queryKey: ['members', current?.id],
+    queryFn: () => api.get<{ data: Member[] }>(`/workspaces/${current!.id}/members`),
+    enabled: !!current,
+  });
   const [page, setPage] = useState(1);
   const q = useQuery({
     queryKey: ['audit', f, page, filter.workspace_id],
@@ -28,8 +33,16 @@ export function AuditLogPage() {
     <div>
       <h1 className="mb-1">Audit log</h1>
       <p className="mb-4 text-sm text-slate-600">Changes in the workspaces where you are an owner or editor. Use the workspace switcher to narrow it down.</p>
-      <div className="card mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="card mb-4 grid grid-cols-2 gap-3 md:grid-cols-5">
         <TextInput placeholder="RCA number" aria-label="RCA number filter" value={f.rca_number} onChange={(e) => set('rca_number', e.target.value)} />
+        <Select
+          aria-label="User filter"
+          placeholder={current ? 'All people' : 'Pick a workspace to filter by person'}
+          disabled={!current}
+          value={f.user_id}
+          onChange={(e) => set('user_id', e.target.value)}
+          options={(members.data?.data ?? []).map((m) => ({ value: m.user_id, label: m.name }))}
+        />
         <Select aria-label="Action filter" placeholder="All actions" value={f.action} onChange={(e) => set('action', e.target.value)} options={ACTIONS.map((a) => ({ value: a, label: a }))} />
         <TextInput type="date" aria-label="From" value={f.date_from} onChange={(e) => set('date_from', e.target.value)} />
         <TextInput type="date" aria-label="To" value={f.date_to} onChange={(e) => set('date_to', e.target.value)} />

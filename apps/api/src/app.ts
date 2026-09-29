@@ -9,6 +9,7 @@ import { jsonReplacer } from './lib/json.js';
 import { auditRouter } from './routes/audit.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { exportsRouter } from './routes/exports.js';
+import { invitationsRouter } from './routes/invitations.js';
 import { rcaAccessMiddleware, rcaRouter } from './routes/rca/index.js';
 import { rcasRouter } from './routes/rcas.js';
 import { workspacesRouter } from './routes/workspaces.js';
@@ -29,6 +30,7 @@ export function createApp() {
   api.use(publicConfigRouter);
   api.use(authRouter);
   api.use(accountRouter);
+  api.use(invitationsRouter);
 
   // Everything below requires a logged-in user and runs inside that user's tenant scope.
   const secured = Router();

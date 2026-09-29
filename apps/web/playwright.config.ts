@@ -33,8 +33,9 @@ export default defineConfig({
         DATABASE_URL: DB,
         PORT: String(API_PORT),
         JWT_SECRET: 'e2e-secret',
+        // No demo data: the journeys start from an empty database, like production.
         NODE_ENV: 'development',
-        SEED_DEMO: 'true',
+        SEED_DEMO: 'false',
         EMAIL_PROVIDER: 'console',
         MAIL_LOG_FILE: MAIL_LOG,
         APP_URL: `http://localhost:${WEB_PORT}`,

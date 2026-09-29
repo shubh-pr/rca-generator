@@ -42,6 +42,7 @@ export async function loadRcaAccess(db: Db, user: AuthUser, rcaId: string) {
     role: role ?? 'VIEWER',
     teams: [...teams],
     isSupport: !role && support,
+    workspaceRole: member?.role ?? null,
   };
   return { rca, ctx };
 }

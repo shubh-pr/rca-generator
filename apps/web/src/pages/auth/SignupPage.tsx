@@ -42,6 +42,7 @@ export function SignupPage() {
   if (done) {
     return (
       <AuthCard title="Check your email" subtitle={`We sent a verification link to ${form.email}.`}>
+        {next?.startsWith('/invite') && <Notice tone="info">Your invitation is applied automatically when you verify this address.</Notice>}
         <Notice tone="success">Open the link in the email to verify your address. It is valid for 24 hours.</Notice>
         <p className="text-sm text-slate-600">
           You can already log in and look around; creating RCAs needs a verified email.
