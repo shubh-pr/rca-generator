@@ -72,6 +72,8 @@ export const envSchema = z
     MAX_UPLOAD_MB: int(10, 1),
     QUOTA_STORAGE_MB: int(200, 1),
     QUOTA_RCA_COUNT: int(500, 1),
+    /** Workspaces one user may own, the personal one included (each unsubscribed workspace has its own free RCA bucket). */
+    QUOTA_OWNED_WORKSPACES: int(5, 1),
 
     PDF_TIMEOUT_MS: int(20_000, 1000),
     PDF_CONCURRENCY: int(2, 1),
@@ -199,7 +201,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env) {
     },
     uploadDir: path.resolve(e.UPLOAD_DIR),
     maxUploadBytes: e.MAX_UPLOAD_MB * 1024 * 1024,
-    quota: { storageBytes: e.QUOTA_STORAGE_MB * 1024 * 1024, rcaCount: e.QUOTA_RCA_COUNT },
+    quota: { storageBytes: e.QUOTA_STORAGE_MB * 1024 * 1024, rcaCount: e.QUOTA_RCA_COUNT, ownedWorkspaces: e.QUOTA_OWNED_WORKSPACES },
     pdf: { timeoutMs: e.PDF_TIMEOUT_MS, concurrency: e.PDF_CONCURRENCY, chromiumSandbox: e.PDF_CHROMIUM_SANDBOX, internalBaseUrlOverride: e.INTERNAL_BASE_URL },
     accountDeletionGraceMs: e.ACCOUNT_DELETION_GRACE_DAYS * 86_400_000,
     jobs: { enabled: e.JOBS_ENABLED, intervalMs: e.JOBS_INTERVAL_MINUTES * 60_000 },

@@ -11,6 +11,7 @@ import { cappedRole } from '../policy/access.js';
 import { assertCanInvite } from '../billing/entitlements.js';
 import { checkRoleTeam, createInvitation } from '../services/invitations.js';
 import { purgeWorkspace, removeStoredFiles } from '../services/purge.js';
+import { withinWorkspaceQuota } from '../services/quota.js';
 import { unscoped } from '../tenancy/context.js';
 
 export const workspacesRouter = Router();
@@ -50,7 +51,7 @@ const nameSchema = z.object({ name: z.string().trim().min(1, 'Name is required')
 workspacesRouter.post('/workspaces', async (req, res) => {
   const me = currentUser(req);
   const { name } = parse(nameSchema, req.body);
-  const ws = await prisma.workspace.create({ data: { name, owner_id: me.id, members: { create: { user_id: me.id, role: 'OWNER' } } } });
+  const ws = await withinWorkspaceQuota(me.id, (tx) => tx.workspace.create({ data: { name, owner_id: me.id, members: { create: { user_id: me.id, role: 'OWNER' } } } }));
   await securityEvent(me.id, 'CREATE', { workspace_id: ws.id, name }, req);
   res.status(201).json({ ...ws, role: 'OWNER', team: null });
 });

@@ -5,6 +5,8 @@
  */
 import type { Team, WorkspaceRole } from '@prisma/client';
 import { hashPassword } from '../src/auth/password.js';
+import { isSubscribed } from '../src/billing/entitlements.js';
+import { handleBillingEvent } from '../src/billing/events.js';
 import { disconnectDb, prisma } from '../src/db.js';
 import { createClosedSample, createDraftSample } from '../src/services/sampleData.js';
 import { unscoped } from '../src/tenancy/context.js';
@@ -57,6 +59,21 @@ async function main() {
       for (const u of USERS.filter((x) => x.role)) {
         await prisma.workspaceMember.create({ data: { workspace_id: demo.id, user_id: users[u.key].id, role: u.role!, team: u.team ?? null } });
       }
+    }
+    // The demo shows collaboration, which needs the Team plan. It is activated like any subscription:
+    // through a (mock) provider event, never by writing billing columns directly.
+    if (!isSubscribed(demo)) {
+      await handleBillingEvent('mock', {
+        id: `demo_evt_activate_${demo.id}_${Date.now()}`,
+        type: 'SUBSCRIPTION_ACTIVATED',
+        workspaceId: demo.id,
+        plan: 'TEAM',
+        seats: 10,
+        subscriptionRef: `demo_sub_${demo.id.slice(0, 8)}`,
+        customerRef: `demo_cus_${demo.id.slice(0, 8)}`,
+        periodEnd: new Date(Date.now() + 365 * 86_400_000).toISOString(),
+        occurredAt: new Date().toISOString(),
+      });
     }
     if ((await prisma.rca.count({ where: { workspace_id: demo.id } })) === 0) {
       const people = { owner: users.owner, lead: users.lead, DEV: users.DEV, QA: users.QA, PROD: users.PROD };

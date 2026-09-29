@@ -8,6 +8,8 @@ A multi-tenant web app for root cause analysis. Anyone can sign up, record an in
 | `docs/SPEC_B2C.md` | Accounts, workspaces, roles and limits |
 | `docs/DEPLOY.md` | **Hosting guide** (domain, HTTPS, email, storage, backups, operator) |
 | `docs/B2C_PLAN.md` | Audit, schema and migration plan, permission model |
+| `docs/BILLING_PLAN.md` | Plans, payment provider contract, billing rules |
+| `docs/STRIPE_SETUP.md` | Checklist for switching from the mock provider to Stripe |
 | `docs/ASSUMPTIONS.md` | Every judgement call |
 | `CLAUDE.md` | Structure, conventions and all commands |
 
@@ -25,7 +27,7 @@ Open **http://localhost:8080**. This local stack uses development settings:
 
 - **Email:** printed to `docker compose logs api` (look for `[email:verify-email]` and open the link).
 - **Attachments:** stored on disk.
-- **Demo workspace:** "Acme Payments (demo)" with two RCAs.
+- **Demo workspace:** "Acme Payments (demo)" with two RCAs, on a demo Team plan (activated through a mock provider event) so collaboration works.
 
 | Demo account (password `Demo-Password-2026`) | Role in the demo workspace |
 |---|---|
@@ -79,7 +81,8 @@ Highlights:
 | Collaboration | `collaboration.test.ts`: workspace and RCA invitations, auto-accept after sign-up, members, transfer. |
 | Quotas and hardening | `hardening.test.ts`: quotas, content checks, PDF sandbox never fetches external URLs, headers, admin and support access. |
 | Lifecycle | `lifecycle.test.ts`: deletion rules, purge after the grace period, export zip. `migration.test.ts`: B2C migration up and down on legacy data. |
-| End to end | `apps/web/e2e/`: sign up → verify → solo RCA → close → PDF/DOCX; invite a DEV contributor who edits only Dev; team workspace; reset password; onboarding sample RCA; settings; export and delete account. |
+| Billing | `billing.test.ts`: the 3-RCA bucket, the watermark on every export, webhook idempotency and signatures, the client cannot mark anything paid, invite and seat gating, PAST_DUE/CANCELED behaviour. `stripe.unit.test.ts`: signature checks and event mapping. |
+| End to end | `apps/web/e2e/`: sign up → verify → solo RCA → close → PDF/DOCX; invite a DEV contributor who edits only Dev; team workspace; reset password; onboarding sample RCA; settings; export and delete account; the free bucket, a TEST MODE unlock, Team subscribe and cancel. |
 
 ## Using it
 
@@ -88,8 +91,9 @@ Highlights:
 3. Fill in the tabs: Header, Common, Dev, QA, Production, Closing. Each team tab auto-saves every 60 seconds; submit each section when it is done.
 4. **Submit for review**, sign the five sign-off rows (the team rows first), then **Close RCA**.
 5. Use **Print**, **PDF** or **Word** on any RCA. On the RCA list, **Export CSV / Excel** and **Blank template** are available.
-6. **Share** an RCA, or create a team workspace under **Workspaces**, and invite people by email with a role (and a team for contributors).
-7. **Account settings** has profile, password, sessions, usage, **Download my data**, the security log and **Delete my account**.
+6. **Share** an RCA, or create a team workspace under **Workspaces**, and invite people (needs the Team plan) by email with a role (and a team for contributors).
+7. **Plans:** the free plan holds 3 unpaid RCAs per workspace, and their exports carry a watermark. Unlock a single RCA, or subscribe to **Solo** (unlimited, no watermark) or **Team** (adds invitations, per seat) under **Account settings → Billing**. Locally, payments use the mock provider: checkout is a **TEST MODE** page with buttons to simulate success, failure or cancel. See `docs/STRIPE_SETUP.md` to switch to Stripe.
+8. **Account settings** has profile, password, sessions, usage, **Download my data**, the security log and **Delete my account**.
 
 ## Deploy
 

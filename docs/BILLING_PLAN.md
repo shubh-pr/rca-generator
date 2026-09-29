@@ -159,9 +159,18 @@ Every one of these is covered by the tenant-isolation suite (B gets 404 on A's R
 
 ## 8. Switching to Stripe later
 
-Summary; `docs/STRIPE_SETUP.md` is the checklist:
+`docs/STRIPE_SETUP.md` is the full checklist. In short:
 
-1. Create the products and prices in Stripe and put the price IDs in the env vars.
-2. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, and register the webhook at `https://<domain>/api/v1/webhooks/payment` with the events listed above.
-3. Set `PAYMENT_PROVIDER=stripe`.
-4. In `apps/api/src/billing/providers/stripe.ts`, resolve the `TODO(stripe-verify)` markers against Stripe test mode. No other file changes.
+| Step | Where | What |
+|---|---|---|
+| 1 | Stripe dashboard | Create the four prices (unlock one-time; Solo, Team base, Team seat monthly). Keep the amounts equal to the `*_PRICE_CENTS` env vars. |
+| 2 | Stripe dashboard | Add the webhook `https://<domain>/api/v1/webhooks/payment` with the seven events in section 2, and configure the customer portal. |
+| 3 | `.env.prod` | `PAYMENT_PROVIDER=stripe`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_RCA_UNLOCK`, `STRIPE_PRICE_SOLO_MONTHLY`, `STRIPE_PRICE_TEAM_BASE`, `STRIPE_PRICE_TEAM_SEAT`. Config validation (`apps/api/src/config.ts`) refuses to start if any is missing. |
+| 4 | `apps/api/src/billing/providers/stripe.ts` | Resolve the `TODO(stripe-verify)` markers against Stripe test mode. `mapStripeEvent()` is the only place that knows Stripe's event shapes; `apps/api/test/stripe.unit.test.ts` holds the fixtures, so update the fixtures from real payloads when you fix a marker. |
+| 5 | Test mode | Run the checklist at the end of `STRIPE_SETUP.md`, then switch to live keys. |
+
+Files that do **not** change: `billing/types.ts` (the contract), `billing/events.ts` (the only writer of billing state), `billing/entitlements.ts`, `billing/service.ts`, `routes/billing.ts` and the web UI. `providers/index.ts` already picks the provider from `PAYMENT_PROVIDER`. With Stripe active the TEST MODE pages and `/billing/mock/*` routes answer 404.
+
+### Mock checkout sessions
+
+A mock session is completed once. A simulated failure marks it `FAILED` (as `checkout.session.async_payment_failed` would), and the TEST MODE page then offers **Start over**, which creates a fresh session. This keeps one provider outcome per session, which is how the Stripe mapping works as well.

@@ -87,6 +87,8 @@ Fill in **every** value in `.env.prod`. The file is commented, and the API valid
 | `PDF_TIMEOUT_MS`, `PDF_CONCURRENCY`, `PDF_CHROMIUM_SANDBOX` | PDF renderer limits. Keep the sandbox on. |
 | `ACCOUNT_DELETION_GRACE_DAYS`, `JOBS_ENABLED`, `JOBS_INTERVAL_MINUTES` | Account deletion grace period and the background job. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in (see `docs/ASSUMPTIONS.md`). |
+| `PAYMENT_PROVIDER`, `STRIPE_*`, `*_PRICE_CENTS`, `BILLING_CURRENCY` | Payments. Production needs `stripe` with all six `STRIPE_*` values; follow `docs/STRIPE_SETUP.md`. The mock provider is refused unless `ALLOW_MOCK_PAYMENTS=true` (staging only). |
+| `QUOTA_OWNED_WORKSPACES` | Workspaces one user may own (default 5). |
 | `BACKUP_*` | See step 7. |
 | `LOG_LEVEL` | `info` by default. Logs are JSON on stdout, without personal data or tokens. |
 
@@ -174,6 +176,7 @@ Work through this checklist:
 - [ ] Email domain verified, with SPF, DKIM and DMARC in place. Send yourself a verification and a password-reset email.
 - [ ] Storage bucket private, versioning on, access key limited to the bucket.
 - [ ] Off-site backups configured, and one restore tested.
+- [ ] Payments: `PAYMENT_PROVIDER=stripe` with live keys, the webhook registered and one real test purchase refunded (`docs/STRIPE_SETUP.md`).
 - [ ] Optional: Turnstile keys, if you get sign-up spam.
 - [ ] Server: automatic security updates (`unattended-upgrades`), SSH key login only, firewall allowing only 22, 80 and 443.
 - [ ] On Ubuntu 24.04: apply the Chromium sandbox sysctl (step 6), then export one PDF to check.

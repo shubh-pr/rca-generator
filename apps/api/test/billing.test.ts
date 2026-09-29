@@ -107,6 +107,14 @@ describe('unpaid RCA bucket', () => {
     expect((await create()).body.error).toBe('BUCKET_FULL');
   });
 
+  it('buckets cannot be multiplied without limit: a user owns at most QUOTA_OWNED_WORKSPACES workspaces', async () => {
+    // The personal workspace is the first of the default 5.
+    const created = await Promise.all([1, 2, 3, 4, 5].map((i) => api().post('/api/v1/workspaces').set(bearer(owner)).send({ name: `Extra ${i}` })));
+    expect(created.map((r) => r.status).sort()).toEqual([201, 201, 201, 201, 422]);
+    expect(created.find((r) => r.status === 422)!.body.error).toBe('QUOTA_EXCEEDED');
+    expect(await raw(() => db.workspace.count({ where: { owner_id: owner.id } }))).toBe(5);
+  });
+
   it('an expired period ends the subscription even without a cancellation event', async () => {
     await subscribe(ws, 'SOLO');
     await raw(() => db.workspace.update({ where: { id: ws }, data: { current_period_end: new Date(Date.now() - 1000) } }));
