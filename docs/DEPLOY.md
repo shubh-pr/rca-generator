@@ -115,7 +115,16 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f api caddy
 
 ### Chromium sandbox
 
-The api container runs as the unprivileged `pwuser`, with a read-only root filesystem, `no-new-privileges`, and the Playwright seccomp profile (`ops/seccomp/chromium.json`). That profile lets Chromium use its own sandbox for PDF rendering. If your kernel does not allow unprivileged user namespaces and PDF export fails with a sandbox error, set `PDF_CHROMIUM_SANDBOX=false` as a last resort. The renderer only ever loads one internal, single-use print page and blocks every other request.
+The api container runs as the unprivileged `pwuser`, with a read-only root filesystem, `no-new-privileges`, and the Playwright seccomp profile (`ops/seccomp/chromium.json`). That profile lets Chromium use its own sandbox for PDF rendering.
+
+**Ubuntu 24.04 hosts:** AppArmor blocks the unprivileged user namespaces the sandbox needs, so PDF export fails with "Chromium sandboxing failed". The same thing happened on GitHub's CI runners. Allow them once on the host and keep the setting across reboots:
+
+```bash
+echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/60-chromium-sandbox.conf
+sudo sysctl --system
+```
+
+Debian 12 does not need this. Only if you cannot change host settings (for example on a PaaS), set `PDF_CHROMIUM_SANDBOX=false`. The renderer still only ever loads one internal, single-use print page and blocks every other request.
 
 ## 7. Backups and restore
 
@@ -167,6 +176,7 @@ Work through this checklist:
 - [ ] Off-site backups configured, and one restore tested.
 - [ ] Optional: Turnstile keys, if you get sign-up spam.
 - [ ] Server: automatic security updates (`unattended-upgrades`), SSH key login only, firewall allowing only 22, 80 and 443.
+- [ ] On Ubuntu 24.04: apply the Chromium sandbox sysctl (step 6), then export one PDF to check.
 - [ ] Monitoring: an uptime check on `https://rca.example.com/api/v1/health`, and alerts on container restarts.
 - [ ] If you upgraded from the internal tool: run `docker compose -f docker-compose.prod.yml --env-file .env.prod exec api node dist/scripts/purge-demo-data.js` (dry run), then add `--confirm` to remove the `@rca.local` demo accounts, if they exist.
 
