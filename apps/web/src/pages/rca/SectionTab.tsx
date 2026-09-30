@@ -253,14 +253,15 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       <section className="space-y-2">
         <h3>Completion</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <Field label="Target date" error={fields.target_date}>
-            <TextInput type="date" value={v.target_date} disabled={!editable} onChange={(e) => form.set('target_date', e.target.value)} />
+          <Field label="Target date" error={fields.target_date} htmlFor={`${team}-target-date`}>
+            <TextInput id={`${team}-target-date`} type="date" value={v.target_date} disabled={!editable} onChange={(e) => form.set('target_date', e.target.value)} />
           </Field>
-          <Field label="Actual date" error={fields.actual_date}>
-            <TextInput type="date" value={v.actual_date} disabled={!editable} onChange={(e) => form.set('actual_date', e.target.value)} />
+          <Field label="Actual date" error={fields.actual_date} htmlFor={`${team}-actual-date`}>
+            <TextInput id={`${team}-actual-date`} type="date" value={v.actual_date} disabled={!editable} onChange={(e) => form.set('actual_date', e.target.value)} />
           </Field>
-          <Field label="Completion status" error={fields.completion_status}>
+          <Field label="Completion status" error={fields.completion_status} htmlFor={`${team}-completion-status`}>
             <Select
+              id={`${team}-completion-status`}
               value={v.completion_status}
               disabled={!editable}
               placeholder="—"
