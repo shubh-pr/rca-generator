@@ -30,6 +30,7 @@ export type AuditAction =
   | 'EMAIL_CHANGE'
   | 'INVITE'
   | 'INVITE_ACCEPT'
+  | 'INVITE_ACCEPT_FAILED'
   | 'INVITE_REVOKE'
   | 'MEMBER_REMOVE'
   | 'ROLE_CHANGE'

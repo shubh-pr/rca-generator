@@ -7,6 +7,7 @@ import { pageResult, parsePage } from '../lib/pagination.js';
 import { parse, zDate, zUuid } from '../lib/validate.js';
 import { canInWorkspace } from '../policy/policy.js';
 import { cappedRole } from '../policy/access.js';
+import { ACCESS_ENTITIES } from '../services/accessAudit.js';
 import { userRef } from '../services/rcaQueries.js';
 
 export const auditRouter = Router();
@@ -35,6 +36,9 @@ auditRouter.get('/audit', async (req, res) => {
   const memberships = await prisma.workspaceMember.findMany({ where: { user_id: me.id }, include: { workspace: true } });
   const allowed = memberships.filter((m) => canInWorkspace(cappedRole(m.role, me.id, m.workspace), 'audit.view')).map((m) => m.workspace_id);
   const and: Prisma.AuditLogWhereInput[] = [{ category: 'DATA' }, { workspace_id: { in: allowed } }];
+  // Access changes (invitations, collaborators, members) are for owners only.
+  const owned = memberships.filter((m) => cappedRole(m.role, me.id, m.workspace) === 'OWNER').map((m) => m.workspace_id);
+  and.push({ OR: [{ entity: { notIn: ACCESS_ENTITIES } }, { workspace_id: { in: owned } }] });
   if (f.workspace_id) and.push({ workspace_id: f.workspace_id });
   if (f.rca_id) and.push({ rca_id: f.rca_id });
   if (f.rca_number) and.push({ rca: { rca_number: { contains: f.rca_number, mode: 'insensitive' } } });
