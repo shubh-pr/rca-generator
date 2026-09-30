@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Member, PendingInvitation, Rca, Team, WorkspaceRole } from '../../api/types';
 import { ErrorBanner, Modal, Select } from '../../components/Form';
 import { InviteForm } from '../../components/InviteForm';
+import { rcaKey } from './rcaApi';
 import { useSaveFeedback } from '../../components/SaveButton';
 import { ROLE_LABEL, TEAM_LABEL, TEAMS } from '../../lib/labels';
 import { PendingInvitations } from '../WorkspacesPage';
@@ -43,6 +44,17 @@ function ShareModal({ rca, onClose }: { rca: Rca; onClose: () => void }) {
     onError: (e) => updateFb.failed(e, 'Access'),
   });
   const remove = useMutation({ mutationFn: (uid: string) => api.del(`/rcas/${rca.id}/collaborators/${uid}`), onSuccess: refresh });
+  // Unlock a collaborator's submitted section from here, so the owner does not need to be asked.
+  const unlockFb = useSaveFeedback();
+  const unlock = useMutation({
+    mutationFn: (team: Team) => api.post(`/rcas/${rca.id}/sections/${team}/reopen`),
+    onSuccess: async (_r, team) => {
+      unlockFb.succeeded(`${TEAM_LABEL[team]} section unlocked`);
+      refresh();
+      await qc.invalidateQueries({ queryKey: rcaKey(rca.id) });
+    },
+    onError: (e) => unlockFb.failed(e, 'Unlock'),
+  });
 
   return (
     <Modal title={`Share ${rca.rca_number}`} onClose={onClose}>
@@ -66,6 +78,18 @@ function ShareModal({ rca, onClose }: { rca: Rca; onClose: () => void }) {
                 <td>
                   {c.name}
                   <div className="text-xs text-slate-500">{c.email}</div>
+                  {c.nothing_to_edit && c.team && (
+                    <div className="mt-1 flex flex-wrap items-center gap-2" data-testid={`locked-${c.user_id}`}>
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900">
+                        {rca.status !== 'DRAFT' ? `RCA is ${rca.status === 'CLOSED' ? 'closed' : 'in review'}: nothing to edit` : `${TEAM_LABEL[c.team]} section locked: nothing to edit`}
+                      </span>
+                      {rca.status === 'DRAFT' && c.section_status === 'SUBMITTED' && rca.permissions.unlock_section && (
+                        <button type="button" className="btn-ghost text-xs text-navy underline" disabled={unlock.isPending} onClick={() => unlock.mutate(c.team!)}>
+                          Unlock {TEAM_LABEL[c.team]}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td>
                   {manage ? (

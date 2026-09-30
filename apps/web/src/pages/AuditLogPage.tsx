@@ -8,7 +8,8 @@ import { useWorkspace } from '../lib/workspace';
 import { formatDateTime } from '../lib/dates';
 import { AuditChange } from './rca/RcaViewPage';
 
-const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'SUBMIT', 'SEND_BACK', 'SIGN', 'CLOSE', 'REOPEN', 'EXPORT'];
+// Access changes (invitations, collaborators, members) are shown to owners only.
+const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'SUBMIT', 'SEND_BACK', 'SIGN', 'CLOSE', 'REOPEN', 'EXPORT', 'INVITE', 'INVITE_ACCEPT', 'INVITE_ACCEPT_FAILED', 'INVITE_REVOKE', 'ROLE_CHANGE', 'MEMBER_REMOVE'];
 
 /** Audit log screen: filter by RCA, user and date (Owner and Admin). */
 export function AuditLogPage() {
