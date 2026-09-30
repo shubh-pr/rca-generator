@@ -4,7 +4,7 @@ import { BillingAlertBanner } from './BillingBits';
 import { Breadcrumbs } from './Breadcrumbs';
 import { ROLE_LABEL } from '../lib/labels';
 import { auditWorkspaces } from '../lib/permissions';
-import { useWorkspace } from '../lib/workspace';
+import { SHARED_WITH_ME, useWorkspace } from '../lib/workspace';
 import { ResendVerification } from '../pages/auth/SignupPage';
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -12,19 +12,20 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 function WorkspaceSwitcher() {
   const { user } = useAuth();
-  const { current, select } = useWorkspace();
+  const { current, shared, select } = useWorkspace();
   if (!user) return null;
   return (
     <label className="mb-4 block px-3 text-xs text-white/70">
       Workspace
       <select
         className="mt-1 w-full rounded border border-white/30 bg-navy-700 px-2 py-1 text-sm text-white"
-        value={current?.id ?? ''}
+        value={shared ? SHARED_WITH_ME : (current?.id ?? '')}
         onChange={(e) => select(e.target.value || null)}
         aria-label="Workspace"
         data-testid="workspace-switcher"
       >
         <option value="">All workspaces</option>
+        {(user.shared_rca_count > 0 || shared) && <option value={SHARED_WITH_ME}>Shared with me ({user.shared_rca_count})</option>}
         {user.workspaces.map((w) => (
           <option key={w.id} value={w.id}>
             {w.name} ({ROLE_LABEL[w.role]})

@@ -312,3 +312,9 @@ Details and reasons: `docs/BILLING_PLAN.md`, section 9.
 - **Locked sections are explained to both sides.** A contributor whose editable section is submitted, or whose RCA is no longer a draft, sees a banner naming the section and what to do. The section tab says who submitted it. The owner sees "Dev section locked: nothing to edit" on that collaborator's row in the Share panel (with **Unlock Dev**) and in People with access. The data is read from the server on every open.
 - **People with access** (workspace page, owners) lists workspace members, the collaborators of every RCA in the workspace, and pending invitations to the workspace or any RCA, in one searchable table. RCA collaborators aren't workspace members, so before this they were visible only one RCA at a time.
 
+## Shared with me
+
+- **What it is.** "Shared with me" in the workspace switcher lists RCAs the user was invited to directly, in workspaces they aren't a member of (`sharedWithWhere` in `services/rcaFilters.ts`: a collaborator of the RCA and not a member of its workspace). It's a filter over RCAs the user can already see; permissions are exactly the ones from the invitation. The option appears when `/me.shared_rca_count` (same definition) is above zero.
+- **Who shared it.** List rows for such RCAs carry `shared: { by, workspace_name, role, team }`. "Shared by" is whoever sent the invitation the user accepted; if that's unknown, it's the workspace's owner. The row tag reads "Shared by alice · alice's workspace · you are contributor (Dev section)".
+- **Consistent everywhere.** The same `shared=true` filter applies to the RCA list, the list export and the dashboard, so their numbers match.
+

@@ -26,7 +26,8 @@ const createSchema = z.object({ ...rcaEditableFields, workspace_id: zUuid.option
 rcasRouter.get('/rcas', async (req, res) => {
   const filters = parseRcaFilters(req.query);
   const p = parsePage(req.query, RCA_SORTABLE, '-rca_date');
-  const where = buildRcaWhere(filters);
+  const me = currentUser(req);
+  const where = buildRcaWhere(filters, me.id);
   const [rows, total] = await Promise.all([
     prisma.rca.findMany({
       where,
@@ -49,7 +50,7 @@ rcasRouter.get('/rcas', async (req, res) => {
         project_name: true,
         team_leader_name: true,
         is_sample: true,
-        workspace: { select: { id: true, name: true } },
+        workspace: { select: { id: true, name: true, owner: { select: { name: true } } } },
         sections: { select: { team: true, section_status: true }, orderBy: { team: 'asc' } },
       },
     }),
@@ -60,8 +61,39 @@ rcasRouter.get('/rcas', async (req, res) => {
     select: { section: { select: { rca_id: true } } },
   });
   const overdueIds = new Set(overdue.map((a) => a.section.rca_id));
-  res.json(pageResult(rows.map((r) => ({ ...r, has_overdue: overdueIds.has(r.id) })), total, p));
+  const shared = await sharedInfo(me.id, rows);
+  res.json(
+    pageResult(
+      rows.map(({ workspace: { owner: _owner, ...workspace }, ...r }) => ({ ...r, workspace, has_overdue: overdueIds.has(r.id), shared: shared.get(r.id) ?? null })),
+      total,
+      p,
+    ),
+  );
 });
+
+/**
+ * For RCAs outside the user's own workspaces (shared with them directly): who shared it, from which
+ * workspace, and the access it gives. "Shared by" is whoever sent the invitation the user accepted;
+ * if unknown, the workspace's owner.
+ */
+async function sharedInfo(userId: string, rows: { id: string; workspace_id: string; workspace: { name: string; owner: { name: string } } }[]) {
+  const memberOf = new Set((await prisma.workspaceMember.findMany({ where: { user_id: userId }, select: { workspace_id: true } })).map((m) => m.workspace_id));
+  const outside = rows.filter((r) => !memberOf.has(r.workspace_id));
+  const result = new Map<string, { by: string; workspace_name: string; role: string; team: string | null }>();
+  if (!outside.length) return result;
+  const ids = outside.map((r) => r.id);
+  const [collabs, invitations] = await Promise.all([
+    prisma.rcaCollaborator.findMany({ where: { user_id: userId, rca_id: { in: ids } }, select: { rca_id: true, role: true, team: true } }),
+    prisma.invitation.findMany({ where: { accepted_by: userId, rca_id: { in: ids } }, select: { rca_id: true, accepted_at: true, inviter: { select: { name: true } } }, orderBy: { accepted_at: 'desc' } }),
+  ]);
+  for (const r of outside) {
+    const c = collabs.find((x) => x.rca_id === r.id);
+    if (!c) continue;
+    const inv = invitations.find((i) => i.rca_id === r.id);
+    result.set(r.id, { by: inv?.inviter?.name ?? r.workspace.owner.name, workspace_name: r.workspace.name, role: c.role, team: c.team });
+  }
+  return result;
+}
 
 /** Default workspace for a new RCA: the user's personal workspace. */
 async function defaultWorkspaceId(userId: string) {

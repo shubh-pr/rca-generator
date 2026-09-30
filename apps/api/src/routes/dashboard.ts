@@ -17,7 +17,7 @@ dashboardRouter.get('/dashboard/summary', async (req, res) => {
   const baseQuery: Query = Object.fromEntries(Object.entries(req.query as Record<string, string>).filter(([k]) => k in base));
   const count = async (extra: Query) => {
     const f = parseRcaFilters({ ...baseQuery, ...extra });
-    return { count: await prisma.rca.count({ where: buildRcaWhere(f) }), filter: { ...baseQuery, ...extra } };
+    return { count: await prisma.rca.count({ where: buildRcaWhere(f, currentUser(req).id) }), filter: { ...baseQuery, ...extra } };
   };
   const today = todayIst();
   const monthStart = ymd(new Date(startOfMonthIst().getTime() + 5.5 * 3_600_000));
@@ -28,7 +28,7 @@ dashboardRouter.get('/dashboard/summary', async (req, res) => {
     count({ status: 'CLOSED', closed_from: monthStart, closed_to: ymd(today) }),
     count({ overdue: 'true' }),
   ]);
-  const baseWhere = buildRcaWhere(base);
+  const baseWhere = buildRcaWhere(base, currentUser(req).id);
   const overdueActions = await prisma.rcaAction.count({ where: { ...overdueActionWhere(today), section: { rca: baseWhere } } });
 
   const resolved = await prisma.rca.findMany({

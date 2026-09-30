@@ -29,7 +29,7 @@ exportsRouter.get('/rcas/export', async (req, res) => {
   );
   const filters = parseRcaFilters(req.query);
   const rcas = await prisma.rca.findMany({
-    where: buildRcaWhere(filters),
+    where: buildRcaWhere(filters, me.id),
     orderBy: [{ rca_date: 'desc' }, { rca_number: 'desc' }],
     take: MAX_LIST_ROWS,
     include: {

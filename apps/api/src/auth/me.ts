@@ -1,4 +1,5 @@
 import { prisma } from '../db.js';
+import { sharedWithWhere } from '../services/rcaFilters.js';
 import { unscoped } from '../tenancy/context.js';
 
 /** Profile plus workspaces (with the user's role) for the web app. */
@@ -10,7 +11,8 @@ export async function meView(userId: string) {
       include: { workspace: { select: { id: true, name: true, is_personal: true, owner_id: true } } },
       orderBy: { created_at: 'asc' },
     });
-    const shared = await prisma.rcaCollaborator.count({ where: { user_id: userId } });
+    // Same definition as the "Shared with me" list (rcaFilters.ts): directly shared, outside my workspaces.
+    const shared = await prisma.rca.count({ where: { is_deleted: false, ...sharedWithWhere(userId) } });
     return {
       id: user.id,
       name: user.name,

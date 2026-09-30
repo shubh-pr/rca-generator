@@ -5,7 +5,7 @@ import { ProgressChips, SeverityChip, StatusChip } from '../../components/Chips'
 import { useAuth } from '../../lib/auth';
 import { useWorkspace } from '../../lib/workspace';
 import { formatDate } from '../../lib/dates';
-import { ENV_LABEL, ENVIRONMENTS, RCA_STATUSES, SEVERITIES, STATUS_LABEL, TEAM_LABEL, TEAMS } from '../../lib/labels';
+import { ENVIRONMENTS, ENV_LABEL, RCA_STATUSES, ROLE_LABEL, SEVERITIES, STATUS_LABEL, TEAMS, TEAM_LABEL } from '../../lib/labels';
 import { creatableWorkspaces } from '../../lib/permissions';
 import { ListExportButtons } from './ListExportButtons';
 import { useRcaList } from './rcaApi';
@@ -16,7 +16,7 @@ export function RcaListPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const { filter: wsFilter, current } = useWorkspace();
+  const { filter: wsFilter, current, shared } = useWorkspace();
   const page = Number(params.get('page') ?? 1);
   const filters: Record<string, string> = {};
   for (const k of FILTER_KEYS) {
@@ -37,7 +37,7 @@ export function RcaListPage() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h1>RCA list</h1>
+        <h1>{shared ? 'Shared with me' : 'RCA list'}</h1>
         <BucketIndicator workspaceId={bucketWorkspaceId(user, current)} />
         <div className="flex gap-2">
           <ListExportButtons filters={{ ...wsFilter, ...filters }} />
@@ -48,6 +48,12 @@ export function RcaListPage() {
           )}
         </div>
       </div>
+      {shared && (
+        <p className="mb-4 rounded bg-blue-50 px-3 py-2 text-sm text-blue-900" data-testid="shared-explainer">
+          RCAs other people invited you to. They belong to their workspaces, so they are not listed under your own workspaces. Your access is the role
+          you were invited with.
+        </p>
+      )}
       <div className="card mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8" aria-label="Filters">
         <TextInput
           className="col-span-2"
@@ -142,6 +148,15 @@ export function RcaListPage() {
                     {!current && <span className="ml-1 text-xs text-slate-500">· {r.workspace.name}</span>}
                     {r.is_sample && <span className="ml-1 rounded bg-amber-100 px-1 text-xs font-semibold text-amber-800">Sample</span>}
                   </div>
+                  {r.shared && (
+                    <div className="mt-0.5 text-xs" data-testid="shared-tag">
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-800">Shared by {r.shared.by}</span>
+                      <span className="ml-1 text-slate-600">
+                        {r.shared.workspace_name} · you are {ROLE_LABEL[r.shared.role].toLowerCase()}
+                        {r.shared.team ? ` (${TEAM_LABEL[r.shared.team]} section)` : ''}
+                      </span>
+                    </div>
+                  )}
                   <div className="max-w-md truncate text-xs text-slate-500">{r.summary}</div>
                 </td>
                 <td>
