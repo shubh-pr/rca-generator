@@ -287,3 +287,10 @@ Setup: `docs/OAUTH_SETUP.md`. Where the brief was open, the option that best pro
 - **Missing claims are never "verified".** Only an explicit true value counts as verified (`true`, `"true"`, `"1"` or `1`). A missing `email_verified`, or `false`, `"false"`, `null`, `0` or `""`, counts as unverified. For Microsoft, an `email_verified` claim is ignored, because Microsoft does not define it; a work account needs `xms_edov`. A missing `email` claim is refused.
 - **Tests.** API tests run the real flow against the real endpoint URLs with `fetch` mocked. The Playwright tests use a local fake OpenID provider (`apps/web/e2e/mockOidc.mjs`), selected by `OAUTH_TEST_PROVIDER_URL`, which production refuses. No test contacts Google or Microsoft.
 
+## Word export and blank template gating
+
+Details and reasons: `docs/BILLING_PLAN.md`, section 9.
+
+- **Word export needs payment.** It is available for a paid RCA or a subscribed workspace only (403 `PAYMENT_REQUIRED` otherwise), because a watermark in an editable `.docx` can simply be deleted. Print and PDF stay open, watermarked when unpaid.
+- **The blank template needs any account.** Unverified accounts are fine. Signup still never starts a session (no account enumeration), so a logged-out visitor signs up and then logs in once, after which the download starts by itself.
+

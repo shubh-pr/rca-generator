@@ -78,10 +78,15 @@ export function BillingAlertBanner() {
   );
 }
 
+/** Start the per-RCA unlock checkout (the watermark bar and the Word export prompt use the same one). */
+export function useUnlockCheckout(rcaId: string) {
+  return useMutation({ mutationFn: () => goToCheckout(api.post<{ checkout_url: string }>(`/billing/rca/${rcaId}/checkout`)) });
+}
+
 /** Watermark / paid state of one RCA, with "Unlock this RCA" and "Remove watermark — subscribe". */
 export function RcaBillingBar({ rca }: { rca: Rca }) {
   const pricing = usePricing();
-  const unlock = useMutation({ mutationFn: () => goToCheckout(api.post<{ checkout_url: string }>(`/billing/rca/${rca.id}/checkout`)) });
+  const unlock = useUnlockCheckout(rca.id);
   if (rca.permissions.read_only_reason === 'SUBSCRIPTION_INACTIVE') {
     return (
       <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="read-only-banner">
@@ -102,7 +107,7 @@ export function RcaBillingBar({ rca }: { rca: Rca }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-3 rounded border border-slate-300 bg-slate-50 px-3 py-2 text-sm" data-testid="watermark-bar">
       <span>
-        <strong>Free plan:</strong> prints and PDF/Word exports of this RCA carry a watermark.
+        <strong>Free plan:</strong> print and PDF exports of this RCA carry a watermark, and Word export needs an unlock or a subscription.
       </span>
       {rca.permissions.edit && (
         <button type="button" className="btn-primary" disabled={unlock.isPending} onClick={() => unlock.mutate()}>

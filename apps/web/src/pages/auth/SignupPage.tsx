@@ -48,8 +48,9 @@ export function SignupPage() {
         <p className="text-sm text-slate-600">
           You can already log in and look around; creating RCAs needs a verified email.
         </p>
+        {next === '/template' && <Notice tone="info">Log in now and your template download starts straight away; you do not need to verify first.</Notice>}
         <Link to={`/login${next ? `?next=${encodeURIComponent(next)}` : ''}`} className="btn-primary w-full" data-testid="go-login">
-          Go to log in
+          {next === '/template' ? 'Log in to download now' : 'Go to log in'}
         </Link>
         <ResendVerification email={form.email} />
       </AuthCard>

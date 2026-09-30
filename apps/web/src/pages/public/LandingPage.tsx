@@ -37,6 +37,13 @@ export function LandingPage() {
                 Log in
               </Link>
             </div>
+            <p className="text-sm text-slate-600">
+              Prefer a document?{' '}
+              <Link to="/template" className="font-semibold text-navy underline" data-testid="cta-template">
+                Download the blank RCA template
+              </Link>{' '}
+              (free account, Word).
+            </p>
           </div>
           <div
             className="flex aspect-video items-center justify-center rounded-lg border-2 border-dashed border-navy/40 bg-white text-sm text-slate-500"

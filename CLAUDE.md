@@ -81,7 +81,8 @@ docs/                     SPEC.md, SPEC_B2C.md, B2C_PLAN.md, BILLING_PLAN.md, ST
 - **Billing:** never write `paid_at`, `payment_reference`, `plan` or `subscription_status` outside `handleBillingEvent()`;
   a client redirect is never proof of payment. Roles of everyone but the primary owner are capped to VIEWER without an
   active Team plan (`cappedRole` in `src/policy/access.ts`). Tests use the mock provider only (`subscribe()` in test/helpers.ts;
-  e2e `subscribeTeamViaUi`). Billing error codes: `BUCKET_FULL` (422), `SUBSCRIPTION_REQUIRED` / `SEAT_LIMIT_REACHED` (403).
+  e2e `subscribeTeamViaUi`). Billing error codes: `BUCKET_FULL` (422), `SUBSCRIPTION_REQUIRED` / `SEAT_LIMIT_REACHED` / `PAYMENT_REQUIRED` (403;
+  the last one for Word export of an unpaid RCA; docx is gated, not watermarked, see BILLING_PLAN.md section 9).
   New `/rcas/:id/...` routes go in `src/routes/rca/` (mounted behind `rcaAccessMiddleware`) and need a case in
   `test/isolation.test.ts` (its coverage check fails otherwise). The web app reads `rca.permissions`; it never re-derives roles.
 - Every create/update/submit/sign/close/reopen/export writes `audit_log` via `src/lib/audit.ts`, in the same transaction.
