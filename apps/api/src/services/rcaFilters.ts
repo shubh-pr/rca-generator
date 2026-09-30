@@ -26,6 +26,8 @@ export const rcaFilterSchema = z.object({
   closed_to: zDate.optional(),
   /** RCAs that have at least one overdue action. */
   overdue: z.enum(['true', 'false']).optional(),
+  /** Shared with me: RCAs I was invited to directly, in workspaces I am not a member of. */
+  shared: z.enum(['true']).optional(),
 });
 
 export type RcaFilters = z.infer<typeof rcaFilterSchema>;
@@ -41,8 +43,18 @@ export function parseRcaFilters(query: unknown): RcaFilters {
 
 const nextDay = (d: Date) => new Date(d.getTime() + 86_400_000);
 
-export function buildRcaWhere(f: RcaFilters): Prisma.RcaWhereInput {
+/**
+ * RCAs shared with the user directly: they are a collaborator of the RCA and not a member of its
+ * workspace. This only narrows what the user can already see; access itself is unchanged.
+ */
+export const sharedWithWhere = (userId: string): Prisma.RcaWhereInput => ({
+  collaborators: { some: { user_id: userId } },
+  workspace: { members: { none: { user_id: userId } } },
+});
+
+export function buildRcaWhere(f: RcaFilters, userId: string): Prisma.RcaWhereInput {
   const and: Prisma.RcaWhereInput[] = [{ is_deleted: false }];
+  if (f.shared === 'true') and.push(sharedWithWhere(userId));
   if (f.status) and.push({ status: f.status });
   if (f.open === 'true') and.push({ status: { in: ['DRAFT', 'IN_REVIEW'] } });
   if (f.workspace_id) and.push({ workspace_id: f.workspace_id });

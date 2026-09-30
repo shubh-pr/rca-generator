@@ -152,6 +152,8 @@ export interface RcaSummary {
   id: string;
   workspace_id: string;
   workspace: { id: string; name: string };
+  /** Set for RCAs shared with me directly (outside my workspaces): who shared it, where it lives, my access. */
+  shared?: { by: string; workspace_name: string; role: WorkspaceRole; team: Team | null } | null;
   rca_number: string;
   rca_date: string;
   severity: Severity;

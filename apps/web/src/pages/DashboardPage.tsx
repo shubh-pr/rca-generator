@@ -35,9 +35,9 @@ const listHref = (f: Record<string, string>) => `/rcas${buildQuery(f)}`;
 
 export function DashboardPage() {
   const { user } = useAuth();
-  const { current, filter } = useWorkspace();
+  const { current, shared, filter } = useWorkspace();
   const q = useQuery({
-    queryKey: ['dashboard', filter.workspace_id ?? 'all'],
+    queryKey: ['dashboard', filter.workspace_id ?? (filter.shared ? 'shared' : 'all')],
     queryFn: () => api.get<Summary>('/dashboard/summary', filter),
   });
   const d = q.data;
@@ -48,7 +48,7 @@ export function DashboardPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1>Dashboard</h1>
         <BucketIndicator workspaceId={bucketWorkspaceId(user, current)} />
-        <span className="text-sm text-slate-600">{current ? current.name : 'All workspaces'}</span>
+        <span className="text-sm text-slate-600">{shared ? 'Shared with me' : current ? current.name : 'All workspaces'}</span>
       </div>
       <ErrorBanner error={q.error} />
       {empty && (
