@@ -86,20 +86,15 @@ Fill in **every** value in `.env.prod`. The file is commented, and the API valid
 | `TURNSTILE_ENABLED`, `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Optional CAPTCHA (Cloudflare dashboard → Turnstile → add site with your domain). |
 | `PDF_TIMEOUT_MS`, `PDF_CONCURRENCY`, `PDF_CHROMIUM_SANDBOX` | PDF renderer limits. Keep the sandbox on. |
 | `ACCOUNT_DELETION_GRACE_DAYS`, `JOBS_ENABLED`, `JOBS_INTERVAL_MINUTES` | Account deletion grace period and the background job. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in (see `docs/ASSUMPTIONS.md`). |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_TENANT`, `OAUTH_REDIRECT_BASE_URL` | Optional Sign in with Google / Microsoft (`docs/OAUTH_SETUP.md`). `OAUTH_REDIRECT_BASE_URL` defaults to `APP_URL` and must share its origin. Never set `OAUTH_TEST_PROVIDER_URL` (test-only; production refuses it). |
 | `PAYMENT_PROVIDER`, `STRIPE_*`, `*_PRICE_CENTS`, `BILLING_CURRENCY` | Payments. Production needs `stripe` with all six `STRIPE_*` values; follow `docs/STRIPE_SETUP.md`. The mock provider is refused unless `ALLOW_MOCK_PAYMENTS=true` (staging only). |
 | `QUOTA_OWNED_WORKSPACES` | Workspaces one user may own (default 5). |
 | `BACKUP_*` | See step 7. |
 | `LOG_LEVEL` | `info` by default. Logs are JSON on stdout, without personal data or tokens. |
 
-### Optional: Google sign-in
+### Optional: Sign in with Google and Microsoft
 
-1. In Google Cloud Console, go to **APIs & Services → OAuth consent screen**. Choose *External*, and enter the app name, support email, your domain and links to your `/privacy` and `/terms` pages. The only scopes needed are `openid`, `email` and `profile`, which need no verification review.
-2. Go to **Credentials → Create credentials → OAuth client ID → Web application**:
-   - Authorized JavaScript origin: `https://rca.example.com`
-   - Authorized redirect URI: `https://rca.example.com/api/v1/auth/google/callback`
-3. Put the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart the api. The "Continue with Google" button appears on the login and sign-up pages.
-4. **Publish** the consent screen (move it out of *Testing*), otherwise only listed test users can sign in.
+Follow `docs/OAUTH_SETUP.md`. It covers the Google Cloud Console and Microsoft Entra ID steps, the exact redirect URIs (`https://rca.example.com/api/v1/auth/google/callback` and `.../microsoft/callback`), and the local versus production values. Put the values in `.env.prod`, then restart the api. Each button appears only when both of its provider's values are set.
 
 ## 6. First deploy
 

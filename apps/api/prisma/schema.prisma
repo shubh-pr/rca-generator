@@ -150,7 +150,6 @@ model User {
   is_active          Boolean   @default(true)
   failed_login_count Int       @default(0)
   locked_until       DateTime? @db.Timestamptz(3)
-  google_sub         String?   @unique @db.VarChar(255)
   onboarded_at       DateTime? @db.Timestamptz(3)
   created_at         DateTime  @default(now()) @db.Timestamptz(3)
   updated_at         DateTime  @updatedAt @db.Timestamptz(3)
@@ -173,6 +172,7 @@ model User {
   invitations_sent  Invitation[]      @relation("InvitedBy")
   email_tokens      EmailToken[]
   refresh_tokens    RefreshToken[]
+  identities        UserIdentity[]
   quota             UsageQuota?
   support_grants    SupportGrant[]
   checkouts         CheckoutSession[]
@@ -672,3 +672,29 @@ model BillingHistory {
   @@index([workspace_id, occurred_at])
   @@map("billing_history")
 }
+
+enum IdentityProvider {
+  GOOGLE
+  MICROSOFT
+
+  @@map("identity_provider")
+}
+
+/** A sign-in provider account (OpenID Connect `sub`) linked to a user. A user can have a password and several providers. */
+model UserIdentity {
+  id                  String           @id @default(uuid()) @db.Uuid
+  user_id             String           @db.Uuid
+  provider            IdentityProvider
+  provider_account_id String           @db.VarChar(255)
+  /** Email the provider reported when linking (display only; sign-in matches provider_account_id). */
+  email               String?          @db.VarChar(180)
+  linked_at           DateTime         @default(now()) @db.Timestamptz(3)
+  last_used_at        DateTime?        @db.Timestamptz(3)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([provider, provider_account_id])
+  @@unique([user_id, provider])
+  @@map("user_identities")
+}
+

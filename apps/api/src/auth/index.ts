@@ -1,5 +1,5 @@
-// Single entry point for authentication. Google sign-in plugs in here too.
+// Single entry point for authentication. Sign in with Google / Microsoft plugs in here too (oauth/).
 export { accountRouter, authRouter, publicConfigRouter } from './routes.js';
-export { googleRouter } from './google.js';
+export { oauthRouter } from './oauth/flow.js';
 export { currentSessionId, currentUser, requireAuth } from './middleware.js';
 export { hashPassword, verifyPassword } from './password.js';

@@ -87,6 +87,17 @@ export async function tokenFromMail(to: string, template: string): Promise<strin
   throw new Error(`No ${template} email for ${to}`);
 }
 
+/** Wait for an email of `template` to `to` in the console mail log and return it. */
+export async function mailTo(to: string, template: string): Promise<{ to: string; template: string; subject: string; text: string }> {
+  for (let i = 0; i < 50; i++) {
+    const lines = fs.existsSync(MAIL_LOG) ? fs.readFileSync(MAIL_LOG, 'utf8').trim().split('\n').filter(Boolean) : [];
+    const mail = lines.map((l) => JSON.parse(l) as { to: string; template: string; subject: string; text: string }).reverse().find((m) => m.to === to && m.template === template);
+    if (mail) return mail;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`No ${template} email for ${to}`);
+}
+
 export const uniqueEmail = (prefix: string) => `${prefix}.${Date.now()}.${Math.floor(Math.random() * 1e6)}@e2e.test`;
 export const STRONG_PASSWORD = 'Harbour-Lantern-Forty-2';
 

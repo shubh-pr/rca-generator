@@ -21,6 +21,12 @@ ${action ? `<p><a href="${esc(action.url)}" style="display:inline-block;backgrou
   return { subject: title, text, html };
 }
 
+/** "1 Oct 2026, 14:05 UTC (19:35 IST)": the app shows IST, the UTC time helps everyone else. */
+function when(d: Date) {
+  const fmt = (timeZone: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-GB', { timeZone, ...opts }).format(d);
+  return `${fmt('UTC', { day: 'numeric', month: 'short', year: 'numeric' })}, ${fmt('UTC', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} UTC (${fmt('Asia/Kolkata', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} IST)`;
+}
+
 const link = (path: string, token: string) => `${config.appUrl}${path}?token=${encodeURIComponent(token)}`;
 
 export const templates = {
@@ -67,6 +73,25 @@ export const templates = {
       ],
       { label: 'Accept invitation', url: link('/invite', token) },
       'If you do not know the sender, ignore this email.',
+    ),
+
+  /** A Google or Microsoft account was connected to an existing account (security notice, always sent). */
+  identityLinked: (name: string, info: { provider: string; providerEmail: string | null; at: Date; via: 'settings' | 'verified_email'; passwordRemoved: boolean }) =>
+    layout(
+      `${info.provider} account connected to your ${PRODUCT} account`,
+      [
+        `Hi ${name},`,
+        `A ${info.provider} account${info.providerEmail ? ` (${info.providerEmail})` : ''} was connected to your account on ${when(info.at)}. You can now sign in with it.`,
+        info.via === 'settings'
+          ? 'It was connected from Account settings while signed in to your account.'
+          : `It was connected automatically when someone signed in with ${info.provider}, because ${info.provider} confirmed that they control this email address.`,
+        ...(info.passwordRemoved
+          ? ['Your email address had not been confirmed before, so the password that was set on this account has been removed and all sessions were signed out. If you want to sign in with a password too, set one in Account settings.']
+          : []),
+        `If this was not you, disconnect ${info.provider} in Account settings → Connected accounts and change your password straight away.`,
+      ],
+      { label: 'Review connected accounts', url: `${config.appUrl}/settings` },
+      'You receive this email for every new sign-in method on your account. It cannot be turned off.',
     ),
 
   accountDeleted: (name: string, graceDays: number) =>

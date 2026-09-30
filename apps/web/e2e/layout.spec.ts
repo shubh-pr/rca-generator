@@ -20,8 +20,9 @@ async function expectShellInPlace(page: Page) {
 /** Scroll the main content to the bottom (wheel and programmatic) and return how far it moved. */
 async function scrollMain(page: Page) {
   const main = page.getByTestId('main-content');
-  const { scrollHeight, clientHeight } = await main.evaluate((el) => ({ scrollHeight: el.scrollHeight, clientHeight: el.clientHeight }));
-  expect(scrollHeight, 'the page must be taller than the viewport for this test to mean anything').toBeGreaterThan(clientHeight);
+  await expect
+    .poll(() => main.evaluate((el) => el.scrollHeight - el.clientHeight), { message: 'the page must be taller than the viewport for this test to mean anything' })
+    .toBeGreaterThan(0);
   await main.hover();
   await page.mouse.wheel(0, 5000);
   await expect.poll(() => main.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
@@ -40,9 +41,12 @@ test('only the main content scrolls; the sidebar with Log out stays fully visibl
   ]) {
     await test.step(`${viewport.width}x${viewport.height}`, async () => {
       await page.setViewportSize(viewport);
-      for (const path of ['/settings', `${rcaPath}/edit?tab=DEV`]) {
+      for (const [path, loaded] of [
+        ['/settings', 'connected-accounts'],
+        [`${rcaPath}/edit?tab=DEV`, 'section-DEV'],
+      ]) {
         await page.goto(path);
-        await expect(page.getByTestId('main-content')).toBeVisible();
+        await expect(page.getByTestId(loaded)).toBeVisible();
         await expectShellInPlace(page);
         expect(await scrollMain(page)).toBeGreaterThan(0);
         await expectShellInPlace(page);
@@ -53,6 +57,7 @@ test('only the main content scrolls; the sidebar with Log out stays fully visibl
   await test.step('very short window: the account block stays pinned, only the sidebar nav scrolls internally', async () => {
     await page.setViewportSize({ width: 1024, height: 300 });
     await page.goto('/settings');
+    await expect(page.getByTestId('connected-accounts')).toBeVisible();
     await expectShellInPlace(page);
     const nav = page.getByTestId('sidebar-scroll');
     const overflow = await nav.evaluate((el) => el.scrollHeight > el.clientHeight);

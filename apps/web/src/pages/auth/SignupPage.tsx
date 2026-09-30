@@ -3,7 +3,7 @@ import { Link, Navigate, useSearchParams } from 'react-router';
 import { api, ApiError } from '../../api/client';
 import { Captcha } from '../../components/Captcha';
 import { Field, TextInput } from '../../components/Form';
-import { GoogleButton } from '../../components/GoogleButton';
+import { OAuthButtons } from '../../components/OAuthButtons';
 import { useAuth } from '../../lib/auth';
 import { safeNext } from '../LoginPage';
 import { AuthCard, Notice } from './AuthCard';
@@ -70,7 +70,7 @@ export function SignupPage() {
       }
     >
       <form onSubmit={submit} className="space-y-4" noValidate>
-        <GoogleButton next={next} />
+        <OAuthButtons next={next} />
         {error && <Notice tone="error">{error}</Notice>}
         <Field label="Your name" htmlFor="name" error={fields.name}>
           <TextInput id="name" autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />

@@ -2,6 +2,14 @@ import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const API_PORT = 4100;
+const MOCK_OIDC_PORT = 4200;
+/** Stand-in for Google and Microsoft (e2e/mockOidc.mjs); the API is pointed at it, real providers are never called. */
+const OAUTH = {
+  GOOGLE_CLIENT_ID: 'e2e-google-client',
+  GOOGLE_CLIENT_SECRET: 'e2e-google-secret',
+  MICROSOFT_CLIENT_ID: 'e2e-microsoft-client',
+  MICROSOFT_CLIENT_SECRET: 'e2e-microsoft-secret',
+};
 const WEB_PORT = 5174;
 const DB = process.env.E2E_DATABASE_URL ?? 'postgresql://rca:rca@localhost:5433/rca_e2e';
 /** The console email provider appends every email here; tests read verification links from it. */
@@ -22,6 +30,13 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
   },
   webServer: [
+    {
+      command: 'node e2e/mockOidc.mjs',
+      url: `http://localhost:${MOCK_OIDC_PORT}/google/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      env: { MOCK_OIDC_PORT: String(MOCK_OIDC_PORT), ...OAUTH },
+    },
     {
       // Fresh, seeded rca_e2e database, then the API.
       command: 'npm run e2e:serve -w @rca/api',
@@ -44,6 +59,8 @@ export default defineConfig({
         EMAIL_MAX_PER_IP: '1000',
         UPLOAD_DIR: './test-uploads/e2e',
         CORS_ORIGIN: `http://localhost:${WEB_PORT}`,
+        ...OAUTH,
+        OAUTH_TEST_PROVIDER_URL: `http://localhost:${MOCK_OIDC_PORT}`,
       },
     },
     {

@@ -221,6 +221,8 @@ Plan and schema are in `docs/B2C_PLAN.md`. These entries record the judgement ca
 
 ## Phase 7: Google sign-in (optional, implemented)
 
+_Superseded where it differs by "Sign in with Google and Microsoft" below: `users.google_sub` moved to `user_identities`, and passwords can now be set from Account settings._
+
 - **Flow.** The server runs the OAuth 2.0 authorization-code flow with PKCE (S256). `state`, the PKCE verifier and the post-login target are kept in a 10-minute httpOnly cookie bound to the browser, which prevents login CSRF and code injection. The redirect URI is `APP_URL/api/v1/auth/google/callback`. The ID token is verified with Google's JWKS (RS256), and the issuer, the audience (our client ID) and the expiry are checked.
 - **Account matching.** A returning user is matched by `google_sub`. An existing account with the same email is linked **only if** Google reports `email_verified: true`; linking also marks the local email verified and applies pending invitations. An unverified Google email is refused. A new user is created with no password, a verified email and a personal workspace, and pending invitations are applied. Deleted or disabled accounts are refused.
 - **Login after Google.** After the callback the server sets the normal refresh and CSRF cookies and redirects to the app, which obtains an access token with the refresh cookie, exactly like a returning visitor.
@@ -249,3 +251,39 @@ Where the brief was open, the option that protects revenue integrity was chosen.
 - **Prices shown come from env vars, and Stripe charges its own prices.** `docs/STRIPE_SETUP.md` says to keep them equal. The amount stored in the checkout session and in the history is the one shown to the buyer.
 - **Currency.** One currency per installation (`BILLING_CURRENCY`, default USD). There is no tax handling; Stripe Tax can be enabled in the Stripe dashboard later.
 - **The demo seed activates a Team plan** for the demo workspace through `handleBillingEvent()` with a mock event (1-year period), because the demo shows collaborators. The seed only runs in development.
+
+## Sign in with Google and Microsoft
+
+Setup: `docs/OAUTH_SETUP.md`. Where the brief was open, the option that best protects accounts was chosen.
+
+- **Identities table.** Provider accounts live in `user_identities` (user_id, provider, provider_account_id, email, linked_at, last_used_at). The table is unique on (provider, provider_account_id) and on (user_id, provider): one Google and one Microsoft account per user, next to an optional password. The migration moves existing `users.google_sub` values across. Its down script restores them, and refuses to run while Microsoft identities exist so they are not lost silently.
+- **Matching.** A returning user is found by the provider's `sub`, never by email, so a changed email at the provider does not matter. For Microsoft, `sub` is specific to the app registration: a new registration produces new `sub` values. Users are then matched again by verified email, or they reconnect in settings.
+- **When an email counts as verified.**
+  - Google: `email_verified: true`.
+  - Microsoft does not send `email_verified`. A personal account (tenant `9188040d-…`) is trusted, because its email is the verified sign-in address. A work or school account is trusted only with the `xms_edov` optional claim, because a tenant administrator can set the email attribute to any address (the "nOAuth" issue).
+  - Everything else counts as unverified.
+- **Unverified email: nothing happens.** A new identity with an unverified email is refused, whether an account with that email exists or not (`email_not_verified`). It neither links nor creates an account.
+- **Pre-registration takeover.** Someone may have registered an email with a password and never verified it. If the real owner later signs in with a provider that verifies the email, the identity is linked, the email is marked verified, and the **unproven password is removed** and all sessions are signed out. The owner can set a password later.
+- **Explicit linking from settings** does not require a matching or verified email. The user is already signed in and chose the account at the provider, and later sign-ins match by `sub` only.
+  - **Link claim:** the link intent is a signed, 10-minute claim naming the user, kept in the flow cookie. It is never in a URL, and a browser cannot rewrite its cookie to point at another user.
+  - **Conflicts:** an identity already linked to another user is refused (`identity_linked_elsewhere`). A second account of the same provider is refused (`provider_already_linked`).
+- **Last sign-in method.** Unlinking is refused with 409 `LAST_LOGIN_METHOD` when the identity is the only method left (no password, no other provider). The check runs under a row lock on the user, so two parallel unlinks cannot remove both methods. The UI disables the button and explains why.
+- **Passwordless accounts** can set a password in Account settings (`POST /me/password`; the usual strength rules apply). "Forgot password" still works too. An account that already has a password must use Change password.
+- **Flow security.**
+  - Authorization-code flow with PKCE (S256), `state` and a `nonce` checked in the ID token.
+  - The ID token must have an RS256 signature from the provider's JWKS, our client ID as audience, and must not be expired.
+  - Issuer: Google must be `accounts.google.com`. Microsoft's issuer must be `login.microsoftonline.com/<tid>/v2.0` for the token's own tenant, restricted further by `MICROSOFT_TENANT` (`consumers`, `organizations` or a tenant GUID).
+  - The flow cookie is httpOnly, lasts 10 minutes, and is limited to the provider's callback path.
+- **`OAUTH_REDIRECT_BASE_URL`** defaults to `APP_URL` and must have the same origin, because the callback sets the session cookie that the app then uses. It must be https in production.
+- **Terms.** Signing up through a provider counts as accepting the Terms; the text under the buttons says so.
+- **No silent links.** Every new identity on an existing account sends the account holder an email at the account's address (template `identity-linked`, same `layout()`/`sendEmail()` pattern as the other account emails). It covers links by verified email and from settings, and says:
+  - which provider and which provider email;
+  - when, in UTC and IST;
+  - how it happened, and whether an unconfirmed password was removed;
+  - how to disconnect it.
+
+  The notice is informational and cannot be turned off. The link itself is not held for confirmation: the provider has already proven control of the address, and that mailbox could reset the password anyway. The email makes a wrong link visible. A new account, a returning sign-in, a refused attempt and re-linking an identity already on the account send nothing.
+- **Audit and data export.** Linking and unlinking write the `IDENTITY_LINK` and `IDENTITY_UNLINK` security events (detail: provider, provider email, `via` = `verified_email` or `settings`, `password_removed`), and setting a password writes `PASSWORD_SET`. The Security log in Account settings labels them per provider ("Google account linked", "Microsoft account disconnected"), separate from "Logged in with Google". Connected accounts are included in "Download my data". Identities are deleted with the account (cascade).
+- **Missing claims are never "verified".** Only an explicit true value counts as verified (`true`, `"true"`, `"1"` or `1`). A missing `email_verified`, or `false`, `"false"`, `null`, `0` or `""`, counts as unverified. For Microsoft, an `email_verified` claim is ignored, because Microsoft does not define it; a work account needs `xms_edov`. A missing `email` claim is refused.
+- **Tests.** API tests run the real flow against the real endpoint URLs with `fetch` mocked. The Playwright tests use a local fake OpenID provider (`apps/web/e2e/mockOidc.mjs`), selected by `OAUTH_TEST_PROVIDER_URL`, which production refuses. No test contacts Google or Microsoft.
+
