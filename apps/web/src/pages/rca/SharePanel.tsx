@@ -117,7 +117,7 @@ function ShareModal({ rca, onClose }: { rca: Rca; onClose: () => void }) {
                 </td>
                 <td className="text-right">
                   {manage && (
-                    <button type="button" className="btn-ghost text-red-700" onClick={() => remove.mutate(c.user_id)}>
+                    <button type="button" className="btn-ghost text-red-700" onClick={() => confirm(`Remove ${c.name} (${c.email}) from ${rca.rca_number}?`) && remove.mutate(c.user_id)}>
                       Remove
                     </button>
                   )}

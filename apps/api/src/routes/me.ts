@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import { currentUser } from '../auth/index.js';
@@ -22,17 +23,55 @@ meDataRouter.get('/me/usage', async (req, res) => {
   res.json(await usageReport(currentUser(req).id));
 });
 
-/** Security events of this account (logins, password/email changes, invitations, exports, deletion). */
+/**
+ * Security events of this account (logins, password/email changes, invitations, exports, deletion),
+ * plus the user's own RCA exports (stored on the RCA's log). `refs` resolves the ids already stored in
+ * the events (RCA numbers, workspace names, people, invitations) so the log can say what happened;
+ * nothing extra is recorded for this.
+ */
 meDataRouter.get('/me/security-events', async (req, res) => {
   const me = currentUser(req);
   const p = parsePage(req.query, ['at'], '-at');
-  const where = { category: 'SECURITY', user_id: me.id };
-  const [data, total] = await Promise.all([
-    prisma.auditLog.findMany({ where, orderBy: [p.orderBy, { id: 'asc' }], skip: p.skip, take: p.take, select: { id: true, action: true, new_value: true, at: true, workspace_id: true } }),
-    prisma.auditLog.count({ where }),
-  ]);
-  res.json(pageResult(data, total, p));
+  const where: Prisma.AuditLogWhereInput = { user_id: me.id, OR: [{ category: 'SECURITY' }, { category: 'DATA', action: 'EXPORT', entity: 'rca' }] };
+  const [data, total] = await unscoped('own security log', () =>
+    Promise.all([
+      prisma.auditLog.findMany({ where, orderBy: [p.orderBy, { id: 'asc' }], skip: p.skip, take: p.take, select: { id: true, action: true, entity: true, new_value: true, at: true, workspace_id: true, rca_id: true } }),
+      prisma.auditLog.count({ where }),
+    ]),
+  );
+  res.json({ ...pageResult(data, total, p), refs: await securityRefs(data) });
 });
+
+const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+
+/** Resolve the ids stored in these events (only fields needed to describe the user's own actions). */
+async function securityRefs(rows: { rca_id: string | null; workspace_id: string | null; new_value: unknown }[]) {
+  const rcaIds = new Set<string>();
+  const wsIds = new Set<string>();
+  const userIds = new Set<string>();
+  const invIds = new Set<string>();
+  for (const r of rows) {
+    const v = (r.new_value ?? {}) as Record<string, unknown>;
+    for (const id of [r.rca_id, str(v.rca_id)]) if (id) rcaIds.add(id);
+    for (const id of [r.workspace_id, str(v.workspace_id)]) if (id) wsIds.add(id);
+    for (const id of [str(v.user_id), str(v.target_user_id)]) if (id) userIds.add(id);
+    if (str(v.invitation_id)) invIds.add(str(v.invitation_id)!);
+  }
+  return unscoped('resolve ids in own security log', async () => {
+    const [rcas, workspaces, users, invitations] = await Promise.all([
+      prisma.rca.findMany({ where: { id: { in: [...rcaIds] } }, select: { id: true, rca_number: true } }),
+      prisma.workspace.findMany({ where: { id: { in: [...wsIds] } }, select: { id: true, name: true } }),
+      prisma.user.findMany({ where: { id: { in: [...userIds] } }, select: { id: true, name: true, email: true } }),
+      prisma.invitation.findMany({ where: { id: { in: [...invIds] } }, select: { id: true, email: true, role: true, team: true, rca_id: true, workspace_id: true } }),
+    ]);
+    return {
+      rcas: Object.fromEntries(rcas.map((r) => [r.id, r.rca_number])),
+      workspaces: Object.fromEntries(workspaces.map((w) => [w.id, w.name])),
+      users: Object.fromEntries(users.map((u) => [u.id, { name: u.name, email: u.email }])),
+      invitations: Object.fromEntries(invitations.map((i) => [i.id, { email: i.email, role: i.role, team: i.team, rca_id: i.rca_id, workspace_id: i.workspace_id }])),
+    };
+  });
+}
 
 /** Download all of my data as a zip (JSON + PDFs + my uploads). */
 meDataRouter.get('/me/export', async (req, res) => {
