@@ -38,14 +38,14 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
       <ErrorBanner error={save.error} />
       <section className="space-y-3">
         <h2>1.1 Problem statement</h2>
-        <Field label="Summary (2-3 lines)" error={errors.summary} htmlFor="summary">
+        <Field label="Summary (2-3 lines)" error={errors.summary} htmlFor="summary" required>
           <TextArea id="summary" value={v.summary} disabled={!editable} onChange={(e) => form.set('summary', e.target.value)} />
         </Field>
       </section>
       <section className="space-y-3">
         <h2>1.2 Impact</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="Users / clients affected" error={errors.impact_users} htmlFor="impact_users">
+          <Field label="Users / clients affected" error={errors.impact_users} htmlFor="impact_users" required>
             <TextArea id="impact_users" value={v.impact_users} disabled={!editable} onChange={(e) => form.set('impact_users', e.target.value)} />
           </Field>
           <Field label="Data / revenue impact" error={errors.impact_data_revenue} htmlFor="impact_data_revenue">
@@ -73,7 +73,7 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
       <section className="space-y-3">
         <h2>1.3 Detection</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Detection method" error={errors.detection_method} htmlFor="detection_method">
+          <Field label="Detection method" error={errors.detection_method} htmlFor="detection_method" required>
             <Select
               id="detection_method"
               value={v.detection_method}
@@ -97,7 +97,7 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
       <section className="space-y-3">
         <h2>1.5 Immediate fix</h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="What stopped the impact" error={errors.immediate_fix} htmlFor="immediate_fix">
+          <Field label="What stopped the impact" error={errors.immediate_fix} htmlFor="immediate_fix" required>
             <TextArea id="immediate_fix" value={v.immediate_fix} disabled={!editable} onChange={(e) => form.set('immediate_fix', e.target.value)} />
           </Field>
           <Field label="Applied by / at" error={errors.immediate_fix_by} htmlFor="immediate_fix_by">

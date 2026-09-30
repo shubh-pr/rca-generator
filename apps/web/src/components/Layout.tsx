@@ -92,7 +92,7 @@ export function Layout() {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col print:block">
         <Breadcrumbs />
-        <main className="min-h-0 flex-1 overflow-y-auto p-6 print:overflow-visible" data-testid="main-content">
+        <main className="relative min-h-0 flex-1 overflow-y-auto p-6 print:overflow-visible" data-testid="main-content">
           {user && !user.email_verified && <VerifyBanner email={user.email} />}
           <BillingAlertBanner />
           <Outlet />
