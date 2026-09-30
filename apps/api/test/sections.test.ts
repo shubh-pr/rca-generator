@@ -78,6 +78,18 @@ describe('optimistic locking (SPEC 3.4)', () => {
     expect(stale.status).toBe(409);
     expect(stale.body.error).toBe('VERSION_CONFLICT');
     expect(stale.body.details.current_version).toBe(2);
+    // The QA contributor saved v2, the editor was stale: the message names who changed it.
+    expect(stale.body.details).toMatchObject({ changed_by_self: false, changed_by_name: a.QA.name });
+    expect(stale.body.message).toBe(`${a.QA.name} changed this section since you opened it. Reload to get the latest version.`);
+  });
+
+  it('a stale save by the same user (another tab) is reported as such, not as "someone else"', async () => {
+    expect((await api().put(url('QA')).set(bearer(a.QA)).send({ version: 1, escape_analysis: 'tab 1' })).status).toBe(200);
+    const otherTab = await api().put(url('QA')).set(bearer(a.QA)).send({ version: 1, escape_analysis: 'tab 2' });
+    expect(otherTab.status).toBe(409);
+    expect(otherTab.body).toMatchObject({ error: 'VERSION_CONFLICT', details: { current_version: 2, changed_by_self: true, changed_by_name: null } });
+    expect(otherTab.body.message).toBe('This section was saved from another tab or window since you opened it here. Reload to continue.');
+    expect(otherTab.body.message).not.toMatch(/someone else/i);
   });
 
   it('two users saving the same section with the same version: exactly one wins', async () => {

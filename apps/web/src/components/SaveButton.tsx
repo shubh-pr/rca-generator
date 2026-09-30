@@ -49,7 +49,7 @@ export function useFormSave(mutation: { mutate: (v: undefined, o: { onSuccess: (
 export function saveErrorMessage(error: unknown, what: string): string {
   const prefix = `${what} not saved`;
   if (error instanceof ApiError) {
-    if (error.code === 'VERSION_CONFLICT') return `${prefix}: someone else changed it in the meantime. Reload to get the latest version.`;
+    if (error.code === 'VERSION_CONFLICT') return `${prefix}: ${error.message}`;
     if (Object.keys(error.fields).length) return `${prefix}: check the highlighted fields.`;
     if (error.status === 401) return `${prefix}: your session ended. Log in again.`;
     return `${prefix}: ${error.message}`;
