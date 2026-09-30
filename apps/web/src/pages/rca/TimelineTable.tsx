@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api/client';
 import type { Rca, TimelineEvent } from '../../api/types';
 import { ErrorBanner, TextInput } from '../../components/Form';
 import { isoToIstInput, istInputToIso } from '../../lib/dates';
+import { SaveButton, useSaveFeedback } from '../../components/SaveButton';
 import { useRcaMutation } from './rcaApi';
 
 interface RowValues {
@@ -63,6 +64,7 @@ export function TimelineTable({ rca }: { rca: Rca }) {
 function TimelineRow({ rca, event, editable, onDone }: { rca: Rca; event?: TimelineEvent; editable: boolean; onDone?: () => void }) {
   const [v, setV] = useState(toRow(event));
   const dirty = JSON.stringify(v) !== JSON.stringify(toRow(event));
+  const fb = useSaveFeedback();
   const save = useRcaMutation(rca.id, () =>
     event ? api.patch(`/rcas/${rca.id}/timeline/${event.id}`, toBody(v)) : api.post(`/rcas/${rca.id}/timeline`, toBody(v)),
   );
@@ -96,14 +98,20 @@ function TimelineRow({ rca, event, editable, onDone }: { rca: Rca; event?: Timel
       </td>
       <td className="text-right whitespace-nowrap">
         {editable && (dirty || !event) && (
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={save.isPending}
-            onClick={() => save.mutate(undefined, { onSuccess: () => onDone?.() })}
-          >
-            Save
-          </button>
+          <SaveButton
+            label="Save"
+            pending={save.isPending}
+            saved={fb.saved}
+            onClick={() =>
+              save.mutate(undefined, {
+                onSuccess: () => {
+                  fb.succeeded(event ? 'Timeline entry saved' : 'Timeline entry added');
+                  onDone?.();
+                },
+                onError: (e) => fb.failed(e, 'Timeline entry'),
+              })
+            }
+          />
         )}
         {editable && !event && (
           <button type="button" className="btn-ghost" onClick={onDone}>

@@ -5,6 +5,7 @@ import { api } from '../api/client';
 import type { Member, PendingInvitation, Team, WorkspaceRole } from '../api/types';
 import { ErrorBanner, Field, Select, TextInput } from '../components/Form';
 import { InviteForm } from '../components/InviteForm';
+import { SaveButton, useSaveFeedback } from '../components/SaveButton';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/dates';
 import { ROLE_LABEL, TEAM_LABEL, TEAMS, WORKSPACE_ROLES } from '../lib/labels';
@@ -85,7 +86,15 @@ export function WorkspaceDetailPage() {
   };
   const invite = useMutation({ mutationFn: (v: { email: string; role: WorkspaceRole; team: Team | null }) => api.post(`/workspaces/${wid}/invitations`, v), onSuccess: refresh });
   const revoke = useMutation({ mutationFn: (id: string) => api.del(`/workspaces/${wid}/invitations/${id}`), onSuccess: refresh });
-  const changeRole = useMutation({ mutationFn: (v: { uid: string; role: WorkspaceRole; team: Team | null }) => api.patch(`/workspaces/${wid}/members/${v.uid}`, { role: v.role, team: v.team }), onSuccess: refresh });
+  const roleFb = useSaveFeedback();
+  const changeRole = useMutation({
+    mutationFn: (v: { uid: string; role: WorkspaceRole; team: Team | null }) => api.patch(`/workspaces/${wid}/members/${v.uid}`, { role: v.role, team: v.team }),
+    onSuccess: () => {
+      roleFb.succeeded('Member access updated');
+      refresh();
+    },
+    onError: (e) => roleFb.failed(e, 'Member access'),
+  });
   const remove = useMutation({
     mutationFn: (uid: string) => api.del(`/workspaces/${wid}/members/${uid}`),
     onSuccess: async (_d, uid) => {
@@ -98,7 +107,15 @@ export function WorkspaceDetailPage() {
   });
   const transfer = useMutation({ mutationFn: (uid: string) => api.post(`/workspaces/${wid}/transfer`, { user_id: uid }), onSuccess: async () => (await reload(), refresh()) });
   const [newName, setNewName] = useState(ws?.name ?? '');
-  const rename = useMutation({ mutationFn: () => api.patch(`/workspaces/${wid}`, { name: newName }), onSuccess: () => reload() });
+  const renameFb = useSaveFeedback();
+  const rename = useMutation({
+    mutationFn: () => api.patch(`/workspaces/${wid}`, { name: newName }),
+    onSuccess: async () => {
+      await reload();
+      renameFb.succeeded('Workspace renamed');
+    },
+    onError: (e) => renameFb.failed(e, 'Workspace name'),
+  });
   const [confirmName, setConfirmName] = useState('');
   const del = useMutation({
     mutationFn: () => api.del(`/workspaces/${wid}`, { confirm_name: confirmName }),
@@ -207,9 +224,7 @@ export function WorkspaceDetailPage() {
           <h2>Settings</h2>
           <div className="flex gap-2">
             <TextInput aria-label="Workspace name" value={newName} onChange={(e) => setNewName(e.target.value)} />
-            <button type="button" className="btn-secondary" disabled={!newName.trim() || rename.isPending} onClick={() => rename.mutate()}>
-              Rename
-            </button>
+            <SaveButton label="Rename" className="btn-secondary" pending={rename.isPending} saved={renameFb.saved} disabled={!newName.trim()} onClick={() => rename.mutate()} />
           </div>
           {!ws.is_personal && (
             <div className="rounded border border-red-200 p-3">

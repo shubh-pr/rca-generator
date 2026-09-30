@@ -68,7 +68,8 @@ export async function createRcaViaUi(page: Page, opts: { workspace?: string; sum
   await page.selectOption('#detection_method', 'MONITORING');
   await page.fill('#immediate_fix', 'Rolled back release');
   await page.getByRole('button', { name: 'Save common sections' }).click();
-  await expect(page.getByRole('button', { name: 'Save common sections' })).toBeDisabled();
+  await expect(page.getByTestId('toast').filter({ hasText: 'Common sections saved' })).toBeVisible();
+  await expect(page.getByTestId('unsaved-indicator')).toHaveCount(0);
   return { rcaPath, rcaNumber };
 }
 

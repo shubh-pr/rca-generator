@@ -7,6 +7,7 @@ import { DETECTION_LABEL, DETECTION_METHODS } from '../../lib/labels';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { ReadOnlyNote } from './HeaderTab';
 import { useRcaMutation } from './rcaApi';
+import { SaveButton, UnsavedBadge, useFormSave } from '../../components/SaveButton';
 import { TimelineTable } from './TimelineTable';
 
 export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) => void }) {
@@ -31,6 +32,7 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
   );
   const editable = rca.permissions.edit && rca.status !== 'CLOSED';
   const errors = save.error instanceof ApiError ? save.error.fields : {};
+  const saveAction = useFormSave(save, form.dirty, 'Common sections', 'Common sections saved');
 
   return (
     <div className="space-y-6">
@@ -111,13 +113,12 @@ export function CommonTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
         </div>
       </section>
       {editable && (
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-3">
+          <UnsavedBadge dirty={form.dirty} />
           <button type="button" className="btn-secondary" disabled={!form.dirty} onClick={form.reset}>
             Discard
           </button>
-          <button type="button" className="btn-primary" disabled={!form.dirty || save.isPending} onClick={() => save.mutate(undefined)}>
-            Save common sections
-          </button>
+          <SaveButton label="Save common sections" pending={save.isPending} saved={saveAction.saved} onClick={saveAction.run} />
         </div>
       )}
     </div>

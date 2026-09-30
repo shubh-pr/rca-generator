@@ -3,6 +3,7 @@ import { api, ApiError } from '../../api/client';
 import { useParticipants } from '../../api/hooks';
 import type { Followup, Rca } from '../../api/types';
 import { Select, TextInput } from '../../components/Form';
+import { SaveButton, useSaveFeedback } from '../../components/SaveButton';
 import { useRcaMutation } from './rcaApi';
 
 interface Row extends Record<string, unknown> {
@@ -54,6 +55,7 @@ function FollowupRow({ rca, followup, editable, onDone }: { rca: Rca; followup?:
   const [v, setV] = useState(toRow(followup));
   const dirty = JSON.stringify(v) !== JSON.stringify(toRow(followup));
   const body = { risk: v.risk, owner_id: v.owner_id || null, due_date: v.due_date || null };
+  const fb = useSaveFeedback();
   const save = useRcaMutation(rca.id, () =>
     followup ? api.patch(`/rcas/${rca.id}/followups/${followup.id}`, body) : api.post(`/rcas/${rca.id}/followups`, body),
   );
@@ -82,9 +84,20 @@ function FollowupRow({ rca, followup, editable, onDone }: { rca: Rca; followup?:
       </td>
       <td className="text-right whitespace-nowrap">
         {editable && (dirty || !followup) && (
-          <button type="button" className="btn-primary" disabled={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => onDone?.() })}>
-            Save
-          </button>
+          <SaveButton
+            label="Save"
+            pending={save.isPending}
+            saved={fb.saved}
+            onClick={() =>
+              save.mutate(undefined, {
+                onSuccess: () => {
+                  fb.succeeded(followup ? 'Follow-up saved' : 'Follow-up added');
+                  onDone?.();
+                },
+                onError: (e) => fb.failed(e, 'Follow-up'),
+              })
+            }
+          />
         )}
         {!followup && (
           <button type="button" className="btn-ghost" onClick={onDone}>

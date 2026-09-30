@@ -5,6 +5,7 @@ import { useWorkspaceBilling } from '../../api/billing';
 import { api } from '../../api/client';
 import { PLAN_LABEL, TestModeBanner } from '../../components/BillingBits';
 import { ErrorBanner, TextInput } from '../../components/Form';
+import { SaveButton, useSaveFeedback } from '../../components/SaveButton';
 import { formatDateTime } from '../../lib/dates';
 
 type PortalAction = { action: 'renew' | 'past_due' | 'cancel' } | { action: 'seats'; seats: number };
@@ -15,9 +16,12 @@ export function TestPortalPage() {
   const qc = useQueryClient();
   const b = useWorkspaceBilling(wid);
   const [seats, setSeats] = useState('');
+  const fb = useSaveFeedback();
   const act = useMutation({
     mutationFn: (body: PortalAction) => api.post(`/billing/mock/portal/${wid}`, body),
-    onSuccess: () => {
+    onError: (e) => fb.failed(e, 'Change'),
+    onSuccess: (_r, body) => {
+      if (body.action === 'seats') fb.succeeded(`Seats changed to ${body.seats}`);
       void qc.invalidateQueries({ queryKey: ['billing'] });
       void qc.invalidateQueries({ queryKey: ['billing-alerts'] });
     },
@@ -59,9 +63,7 @@ export function TestPortalPage() {
                   Seats
                   <TextInput type="number" min={1} value={seats} onChange={(e) => setSeats(e.target.value)} placeholder={String(d.seats)} aria-label="Seats" />
                 </label>
-                <button type="submit" className="btn-secondary" disabled={!seats || act.isPending}>
-                  Change seats
-                </button>
+                <SaveButton type="submit" label="Change seats" className="btn-secondary" pending={act.isPending && act.variables?.action === 'seats'} saved={fb.saved} disabled={!seats || act.isPending} />
               </form>
             )}
             {act.isSuccess && <p className="rounded bg-green-50 px-3 py-2 text-sm text-green-900">Simulated provider event delivered.</p>}

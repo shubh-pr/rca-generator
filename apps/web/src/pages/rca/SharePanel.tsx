@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Member, PendingInvitation, Rca, Team, WorkspaceRole } from '../../api/types';
 import { ErrorBanner, Modal, Select } from '../../components/Form';
 import { InviteForm } from '../../components/InviteForm';
+import { useSaveFeedback } from '../../components/SaveButton';
 import { ROLE_LABEL, TEAM_LABEL, TEAMS } from '../../lib/labels';
 import { PendingInvitations } from '../WorkspacesPage';
 
@@ -32,7 +33,15 @@ function ShareModal({ rca, onClose }: { rca: Rca; onClose: () => void }) {
   };
   const invite = useMutation({ mutationFn: (v: { email: string; role: WorkspaceRole; team: Team | null }) => api.post(`/rcas/${rca.id}/invitations`, v), onSuccess: refresh });
   const revoke = useMutation({ mutationFn: (id: string) => api.del(`/rcas/${rca.id}/invitations/${id}`), onSuccess: refresh });
-  const update = useMutation({ mutationFn: (v: { uid: string; role: WorkspaceRole; team: Team | null }) => api.patch(`/rcas/${rca.id}/collaborators/${v.uid}`, { role: v.role, team: v.team }), onSuccess: refresh });
+  const updateFb = useSaveFeedback();
+  const update = useMutation({
+    mutationFn: (v: { uid: string; role: WorkspaceRole; team: Team | null }) => api.patch(`/rcas/${rca.id}/collaborators/${v.uid}`, { role: v.role, team: v.team }),
+    onSuccess: () => {
+      updateFb.succeeded('Access updated');
+      refresh();
+    },
+    onError: (e) => updateFb.failed(e, 'Access'),
+  });
   const remove = useMutation({ mutationFn: (uid: string) => api.del(`/rcas/${rca.id}/collaborators/${uid}`), onSuccess: refresh });
 
   return (
