@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { Rca } from '../../api/types';
 import { ErrorBanner } from '../../components/Form';
+import { SaveButton, UnsavedBadge, useFormSave } from '../../components/SaveButton';
 import { isoToIstInput } from '../../lib/dates';
 import { useDirtyForm } from '../../lib/useDirtyForm';
 import { HeaderFields, headerToBody, type HeaderValues } from './HeaderFields';
@@ -31,6 +32,7 @@ export function HeaderTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
   const save = useRcaMutation(rca.id, () => api.patch(`/rcas/${rca.id}`, headerToBody(form.values)));
   const editable = rca.permissions.edit && rca.status !== 'CLOSED';
   const errors = save.error instanceof ApiError ? save.error.fields : {};
+  const saveAction = useFormSave(save, form.dirty, 'Header', 'Header saved');
 
   return (
     <div className="space-y-4">
@@ -39,13 +41,12 @@ export function HeaderTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =>
       <ErrorBanner error={save.error} />
       <HeaderFields values={form.values} set={form.set} errors={errors} disabled={!editable} rcaNumber={rca.rca_number} workspaceId={rca.workspace_id} />
       {editable && (
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-3">
+          <UnsavedBadge dirty={form.dirty} />
           <button type="button" className="btn-secondary" disabled={!form.dirty} onClick={form.reset}>
             Discard
           </button>
-          <button type="button" className="btn-primary" disabled={!form.dirty || save.isPending} onClick={() => save.mutate(undefined)}>
-            Save header
-          </button>
+          <SaveButton label="Save header" pending={save.isPending} saved={saveAction.saved} onClick={saveAction.run} />
         </div>
       )}
     </div>

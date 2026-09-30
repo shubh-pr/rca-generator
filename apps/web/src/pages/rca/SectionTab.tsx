@@ -1,10 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { CauseCategory, CompletionStatus, Rca, Team, TeamSection } from '../../api/types';
 import { SectionBadge } from '../../components/Chips';
 import { ErrorBanner, Field, RequiredMark, Select, TextArea, TextInput } from '../../components/Form';
 import { ProblemList } from '../../components/ProblemList';
+import { SaveButton, UnsavedBadge, useSaveFeedback } from '../../components/SaveButton';
 import { focusJumpTarget, sectionFieldTarget } from '../../lib/fieldJump';
 import { formatDateTime } from '../../lib/dates';
 import { ACTION_STATUS_LABEL, ACTION_STATUSES, CAUSE_CATEGORIES, CAUSE_LABEL, TEAM_LABEL, TEAM_PROMPTS } from '../../lib/labels';
@@ -80,10 +81,29 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
   });
   const unlock = useRcaMutation(rca.id, () => api.post(`/rcas/${rca.id}/sections/${team}/reopen`));
 
-  // Auto-save every 60 seconds while there are unsaved edits (SPEC 6.2).
+  const label = `${TEAM_LABEL[team]} section`;
+  const fb = useSaveFeedback();
+  const [autoSavedAt, setAutoSavedAt] = useState<Date | null>(null);
+  const saveDraft = () => {
+    if (!form.dirty) return fb.info('No changes to save');
+    save.mutate(undefined, { onSuccess: () => fb.succeeded(`${label} draft saved`), onError: (e) => fb.failed(e, `${label} draft`) });
+  };
+  const submitSection = () =>
+    submit.mutate(undefined, {
+      onSuccess: () => fb.succeeded(`${label} submitted`),
+      onError: (e) =>
+        e instanceof ApiError && e.code === 'BUSINESS_RULE' && Object.keys(e.fields).length
+          ? fb.info(`${label} not submitted yet: complete the items listed.`)
+          : fb.failed(e, label),
+    });
+
+  // Auto-save every 60 seconds while there are unsaved edits (SPEC 6.2). Quiet on success (a note by
+  // the buttons, no toast every minute); a failure shows an error toast.
   const autosave = useRef<() => void>(() => {});
   autosave.current = () => {
-    if (editable && form.dirty && !save.isPending && !submit.isPending && !isConflict(save.error)) save.mutate(undefined);
+    if (editable && form.dirty && !save.isPending && !submit.isPending && !isConflict(save.error)) {
+      save.mutate(undefined, { onSuccess: () => setAutoSavedAt(new Date()), onError: (e) => fb.failed(e, `${label} draft (auto-save)`) });
+    }
   };
   useEffect(() => {
     const t = setInterval(() => autosave.current(), AUTOSAVE_MS);
@@ -117,13 +137,17 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
             </span>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {editable && (
             <>
-              <button type="button" className="btn-secondary" disabled={!form.dirty || save.isPending} onClick={() => save.mutate(undefined)}>
-                {save.isPending ? 'Saving…' : 'Save draft'}
-              </button>
-              <button type="button" id={`${team}-submit`} className="btn-primary" disabled={submit.isPending} onClick={() => submit.mutate(undefined)}>
+              <UnsavedBadge dirty={form.dirty} />
+              {!form.dirty && autoSavedAt && (
+                <span className="text-xs text-slate-500" data-testid="autosaved">
+                  Draft auto-saved at {autoSavedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}
+                </span>
+              )}
+              <SaveButton label="Save draft" className="btn-secondary" pending={save.isPending} saved={fb.saved && !submit.isPending} onClick={saveDraft} />
+              <button type="button" id={`${team}-submit`} className="btn-primary" disabled={submit.isPending} onClick={submitSection}>
                 Submit section
               </button>
             </>
@@ -156,7 +180,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       ) : (
         <ErrorBanner error={err} />
       )}
-      {editable && form.dirty && <p className="text-xs text-slate-500">Unsaved changes are auto-saved every 60 seconds.</p>}
+      {editable && form.dirty && <p className="text-xs text-slate-500">Unsaved changes are auto-saved every 60 seconds, or use Save draft.</p>}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Field label="Team lead / RCA contributor" error={fields.contributor_name}>

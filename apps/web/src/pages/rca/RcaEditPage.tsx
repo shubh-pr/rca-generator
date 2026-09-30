@@ -91,6 +91,11 @@ export function RcaEditPage() {
               }`}
             >
               {t.label}
+              {tab === t.key && dirty && (
+                <span className="h-2 w-2 rounded-full bg-amber-500" title="Unsaved changes" data-testid="tab-unsaved">
+                  <span className="sr-only">(unsaved changes)</span>
+                </span>
+              )}
               <SectionBadge value={tabStatus(r, t.key)} />
             </button>
           ))}

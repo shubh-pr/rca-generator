@@ -27,7 +27,7 @@ test('empty dashboard, settings: profile, sessions and log out of all devices', 
   await page.getByRole('link', { name: 'Account settings' }).click();
   await page.fill('#profile-name', 'Eli Renamed');
   await page.getByRole('button', { name: 'Save profile' }).click();
-  await expect(page.getByText('Profile saved.')).toBeVisible();
+  await expect(page.getByTestId('toast').filter({ hasText: 'Profile saved' })).toBeVisible();
   await expect(page.getByTestId('current-user')).toHaveText('Eli Renamed');
   await expect(page.getByTestId('sessions').getByText('This device')).toBeVisible();
   await page.getByRole('button', { name: 'Log out of all devices' }).click();

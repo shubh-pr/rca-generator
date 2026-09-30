@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { Me } from '../api/types';
 import { ErrorBanner, Field, TextInput } from '../components/Form';
+import { SaveButton, UnsavedBadge, useSaveFeedback } from '../components/SaveButton';
 import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/dates';
 import { AccountLifecycle } from './settings/AccountLifecycle';
@@ -30,13 +31,17 @@ function Profile() {
   const [email, setEmail] = useState(user?.email ?? '');
   const [password, setPassword] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const fb = useSaveFeedback();
   const save = useMutation({
     mutationFn: () => api.patch<Me & { email_change_pending: boolean }>('/me', { name, ...(email !== user?.email ? { email, current_password: password } : {}) }),
     onSuccess: (me) => {
       setUser(me);
       setPassword('');
-      setNotice(me.email_change_pending ? `We sent a confirmation link to ${email}. Your login email changes after you open it.` : 'Profile saved.');
+      fb.succeeded('Profile saved');
+      // The email change needs an action, so it stays on the page as well.
+      if (me.email_change_pending) setNotice(`We sent a confirmation link to ${email}. Your login email changes after you open it.`);
     },
+    onError: (e) => fb.failed(e, 'Profile'),
   });
   const fields = save.error instanceof ApiError ? save.error.fields : {};
   const emailChanged = email !== user?.email;
@@ -64,10 +69,9 @@ function Profile() {
             <TextInput id="profile-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </Field>
         )}
-        <div className="md:col-span-2">
-          <button type="submit" className="btn-primary" disabled={save.isPending}>
-            Save profile
-          </button>
+        <div className="flex items-center gap-3 md:col-span-2">
+          <SaveButton type="submit" label="Save profile" pending={save.isPending} saved={fb.saved} />
+          <UnsavedBadge dirty={name !== (user?.name ?? '') || email !== (user?.email ?? '')} />
         </div>
       </form>
     </section>
@@ -116,21 +120,24 @@ function ChangePassword() {
   const { user } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
-  const [ok, setOk] = useState(false);
+  const fb = useSaveFeedback();
   const change = useMutation({
     mutationFn: () => api.post('/auth/change-password', { current_password: current, new_password: next }),
-    onSuccess: () => (setOk(true), setCurrent(''), setNext('')),
+    onSuccess: () => {
+      setCurrent('');
+      setNext('');
+      fb.succeeded('Password changed. Your other devices were signed out.');
+    },
+    onError: (e) => fb.failed(e, 'Password'),
   });
   const fields = change.error instanceof ApiError ? change.error.fields : {};
   if (user && !user.has_password) return null;
   return (
     <section className="card space-y-3">
       <h2>Change password</h2>
-      {ok && <p className="rounded bg-green-50 px-3 py-2 text-sm text-green-900">Password changed. Your other devices were signed out.</p>}
       <form
         onSubmit={(e: FormEvent) => {
           e.preventDefault();
-          setOk(false);
           change.mutate();
         }}
         className="grid gap-3 md:grid-cols-2"
@@ -142,9 +149,7 @@ function ChangePassword() {
           <TextInput id="pw-new" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} />
         </Field>
         <div className="md:col-span-2">
-          <button type="submit" className="btn-primary" disabled={change.isPending}>
-            Change password
-          </button>
+          <SaveButton type="submit" label="Change password" pending={change.isPending} saved={fb.saved} />
         </div>
       </form>
     </section>

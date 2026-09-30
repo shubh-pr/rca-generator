@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';
 import './index.css';
+import { ToastProvider } from './components/Toast';
 import { AuthProvider } from './lib/auth';
 import { router } from './router';
 import { WorkspaceProvider } from './lib/workspace';
@@ -16,7 +17,9 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <WorkspaceProvider>
-          <RouterProvider router={router} />
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
         </WorkspaceProvider>
       </AuthProvider>
     </QueryClientProvider>

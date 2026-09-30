@@ -5,6 +5,7 @@ import { api, ApiError } from '../../api/client';
 import type { Me } from '../../api/types';
 import { ErrorBanner, Field, TextInput } from '../../components/Form';
 import { oauthErrorMessage, PROVIDER_LABEL, ProviderButton, type OAuthProvider } from '../../components/OAuthButtons';
+import { SaveButton, useSaveFeedback } from '../../components/SaveButton';
 import { useAuth } from '../../lib/auth';
 import { formatDateTime } from '../../lib/dates';
 
@@ -116,7 +117,15 @@ export function ConnectedAccounts() {
 
 function SetPassword({ onDone }: { onDone: () => Promise<void> }) {
   const [password, setPassword] = useState('');
-  const set = useMutation({ mutationFn: () => api.post('/me/password', { new_password: password }), onSuccess: onDone });
+  const fb = useSaveFeedback();
+  const set = useMutation({
+    mutationFn: () => api.post('/me/password', { new_password: password }),
+    onSuccess: async () => {
+      fb.succeeded('Password set. You can now also sign in with your email address.');
+      await onDone();
+    },
+    onError: (e) => fb.failed(e, 'Password'),
+  });
   const fields = set.error instanceof ApiError ? set.error.fields : {};
   return (
     <form
@@ -132,9 +141,7 @@ function SetPassword({ onDone }: { onDone: () => Promise<void> }) {
       <Field label="New password" htmlFor="set-password" error={fields.new_password} hint="At least 10 characters">
         <TextInput id="set-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </Field>
-      <button type="submit" className="btn-primary" disabled={set.isPending || !password}>
-        Set password
-      </button>
+      <SaveButton type="submit" label="Set password" pending={set.isPending} saved={fb.saved} disabled={!password} />
     </form>
   );
 }

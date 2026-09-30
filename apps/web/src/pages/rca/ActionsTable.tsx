@@ -6,6 +6,7 @@ import { Select, TextInput } from '../../components/Form';
 import { todayIst } from '../../lib/dates';
 import { ACTION_STATUS_LABEL, ACTION_STATUSES } from '../../lib/labels';
 import { MoveToFollowupButton } from './MoveToFollowupButton';
+import { SaveButton, useSaveFeedback } from '../../components/SaveButton';
 import { useRcaMutation } from './rcaApi';
 
 interface Row extends Record<string, unknown> {
@@ -92,6 +93,15 @@ function ActionRow({
   const save = useRcaMutation(rca.id, () => (action ? api.patch(`${base}/${action.id}`, body) : api.post(base, body)));
   const remove = useRcaMutation(rca.id, () => api.del(`${base}/${action!.id}`));
   const fields = save.error instanceof ApiError ? save.error.fields : {};
+  const fb = useSaveFeedback();
+  const onSave = () =>
+    save.mutate(undefined, {
+      onSuccess: () => {
+        fb.succeeded(action ? 'Action saved' : 'Action added');
+        onDone?.();
+      },
+      onError: (e) => fb.failed(e, 'Action'),
+    });
   const textEditable = mayEdit && !locked;
   const statusEditable = mayEdit;
   const overdue = action ? action.is_overdue : !!v.due_date && v.due_date < todayIst() && v.status !== 'COMPLETED';
@@ -148,9 +158,7 @@ function ActionRow({
       </td>
       <td className="text-right whitespace-nowrap">
         {mayEdit && (dirty || !action) && (
-          <button type="button" className="btn-primary" disabled={save.isPending} onClick={() => save.mutate(undefined, { onSuccess: () => onDone?.() })}>
-            Save
-          </button>
+          <SaveButton label="Save" pending={save.isPending} saved={fb.saved} onClick={onSave} />
         )}
         {!action && (
           <button type="button" className="btn-ghost" onClick={onDone}>
