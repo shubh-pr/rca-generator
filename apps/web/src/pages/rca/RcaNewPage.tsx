@@ -68,7 +68,10 @@ export function RcaNewPage() {
   return (
     <form onSubmit={submit} noValidate>
       <BlamelessNote />
-      <h1 className="mb-4">New RCA</h1>
+      <h1 className="mb-1">New RCA</h1>
+      <p className="mb-4 text-xs text-slate-500" data-testid="required-legend">
+        <span className="font-semibold text-red-600">*</span> Required before “Submit for review” (you can add them later)
+      </p>
       <div className="card space-y-4">
         <ErrorBanner error={create.error} />
         {workspaces.length > 1 && (

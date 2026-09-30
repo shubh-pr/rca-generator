@@ -100,10 +100,10 @@ export function HeaderFields({ values, set, errors, disabled, rcaNumber, workspa
       <Field label="Incident start (IST)" error={errors.incident_start} htmlFor="incident_start">
         <TextInput id="incident_start" type="datetime-local" value={values.incident_start} disabled={disabled} onChange={(e) => set('incident_start', e.target.value)} />
       </Field>
-      <Field label="Detected at (IST)" error={errors.detected_at} htmlFor="detected_at">
+      <Field label="Detected at (IST)" error={errors.detected_at} htmlFor="detected_at" required>
         <TextInput id="detected_at" type="datetime-local" value={values.detected_at} disabled={disabled} onChange={(e) => set('detected_at', e.target.value)} />
       </Field>
-      <Field label="Resolved at (IST)" error={errors.resolved_at} htmlFor="resolved_at">
+      <Field label="Resolved at (IST)" error={errors.resolved_at} htmlFor="resolved_at" required>
         <TextInput id="resolved_at" type="datetime-local" value={values.resolved_at} disabled={disabled} onChange={(e) => set('resolved_at', e.target.value)} />
       </Field>
       <Field label="Time to detect" hint="Calculated: Detected at minus Incident start">

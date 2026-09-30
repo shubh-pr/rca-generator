@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import { api, ApiError } from '../../api/client';
 import type { CauseCategory, CompletionStatus, Rca, Team, TeamSection } from '../../api/types';
 import { SectionBadge } from '../../components/Chips';
-import { ErrorBanner, Field, Select, TextArea, TextInput } from '../../components/Form';
+import { ErrorBanner, Field, RequiredMark, Select, TextArea, TextInput } from '../../components/Form';
+import { ProblemList } from '../../components/ProblemList';
+import { focusJumpTarget, sectionFieldTarget } from '../../lib/fieldJump';
 import { formatDateTime } from '../../lib/dates';
 import { ACTION_STATUS_LABEL, ACTION_STATUSES, CAUSE_CATEGORIES, CAUSE_LABEL, TEAM_LABEL, TEAM_PROMPTS } from '../../lib/labels';
 import { useDirtyForm } from '../../lib/useDirtyForm';
@@ -103,7 +105,9 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
     <div className="space-y-6" data-testid={`section-${team}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h2>{TEAM_LABEL[team]} section</h2>
+          <h2 id={`${team}-heading`} tabIndex={-1}>
+            {TEAM_LABEL[team]} section
+          </h2>
           <SectionBadge value={section.section_status} />
           <span className="text-xs text-slate-500">version {section.version}</span>
           {section.submitted_at && <span className="text-xs text-slate-500">submitted {formatDateTime(section.submitted_at)}</span>}
@@ -119,7 +123,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
               <button type="button" className="btn-secondary" disabled={!form.dirty || save.isPending} onClick={() => save.mutate(undefined)}>
                 {save.isPending ? 'Saving…' : 'Save draft'}
               </button>
-              <button type="button" className="btn-primary" disabled={submit.isPending} onClick={() => submit.mutate(undefined)}>
+              <button type="button" id={`${team}-submit`} className="btn-primary" disabled={submit.isPending} onClick={() => submit.mutate(undefined)}>
                 Submit section
               </button>
             </>
@@ -141,6 +145,14 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
             Reload
           </button>
         </div>
+      ) : err?.code === 'BUSINESS_RULE' && Object.keys(fields).length ? (
+        // "Section is not complete": the same clickable summary as Submit for review.
+        <ProblemList
+          testId={`section-errors-${team}`}
+          title={err.message}
+          problems={Object.entries(fields).map(([key, text]) => ({ text, target: sectionFieldTarget(team, key) }))}
+          onJump={(t) => focusJumpTarget(t.ids)}
+        />
       ) : (
         <ErrorBanner error={err} />
       )}
@@ -150,7 +162,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
         <Field label="Team lead / RCA contributor" error={fields.contributor_name}>
           <TextInput value={v.contributor_name} disabled={!editable} onChange={(e) => form.set('contributor_name', e.target.value)} aria-label="Team lead" />
         </Field>
-        <Field label="Cause category" error={fields.cause_category} htmlFor={`${team}-cause`}>
+        <Field label="Cause category" error={fields.cause_category} htmlFor={`${team}-cause`} required>
           <Select
             id={`${team}-cause`}
             value={v.cause_category}
@@ -166,7 +178,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
         {[1, 2, 3, 4, 5].map((n) => {
           const key = `why_${n}` as 'why_1';
           return (
-            <Field key={n} label={n === 5 ? 'Why 5 — Root cause' : `Why ${n}`} error={fields[`whys.${n}`]} htmlFor={`${team}-why-${n}`}>
+            <Field key={n} label={n === 5 ? 'Why 5 — Root cause' : `Why ${n}`} error={fields[`whys.${n}`]} htmlFor={`${team}-why-${n}`} required={n === 1 || n === 5}>
               <TextArea id={`${team}-why-${n}`} rows={2} value={v[key]} disabled={!editable} onChange={(e) => form.set(key, e.target.value)} />
             </Field>
           );
@@ -174,7 +186,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Field label={labels.escape_analysis} error={fields.escape_analysis} htmlFor={`${team}-escape`}>
+        <Field label={labels.escape_analysis} error={fields.escape_analysis} htmlFor={`${team}-escape`} required>
           <TextArea id={`${team}-escape`} value={v.escape_analysis} disabled={!editable} onChange={(e) => form.set('escape_analysis', e.target.value)} />
         </Field>
         <Field label={labels.extra_1} error={fields.extra_1} htmlFor={`${team}-extra1`}>
@@ -185,8 +197,12 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
         </Field>
       </section>
 
-      <section className="space-y-2">
-        <h3>Actions</h3>
+      <section className="space-y-2" id={`${team}-actions`} tabIndex={-1} aria-labelledby={`${team}-actions-title`}>
+        <h3 id={`${team}-actions-title`}>
+          Actions
+          <RequiredMark />
+          <span className="ml-2 text-xs font-normal text-slate-500">at least one</span>
+        </h3>
         {fields.actions && (
           <p className="text-xs text-red-600" role="alert">
             {fields.actions}

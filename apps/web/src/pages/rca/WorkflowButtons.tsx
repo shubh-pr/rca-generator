@@ -1,11 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { ProblemList } from '../../components/ProblemList';
+import { problemTarget, type JumpTarget } from '../../lib/fieldJump';
 import { api, ApiError } from '../../api/client';
 import type { Rca, Team } from '../../api/types';
 import { Field, Modal, TextArea } from '../../components/Form';
 import { TEAM_LABEL, TEAMS } from '../../lib/labels';
 import { useRcaMutation } from './rcaApi';
+import { useRcaJump } from './rcaJump';
 
 /** Review, send back, close, reopen and delete (SPEC 3.1). The server checks every rule. */
 export function WorkflowButtons({ rca }: { rca: Rca }) {
@@ -51,30 +54,38 @@ export function WorkflowButtons({ rca }: { rca: Rca }) {
           Delete
         </button>
       )}
-      {error && <WorkflowError error={error} />}
+      {error && <WorkflowError error={error} rca={rca} />}
       {modal === 'send-back' && <SendBackModal rca={rca} onClose={() => setModal(null)} />}
       {modal === 'reopen' && <ReopenModal rca={rca} onClose={() => setModal(null)} />}
     </>
   );
 }
 
-function WorkflowError({ error }: { error: Error }) {
+/**
+ * "Cannot submit for review" / "Cannot close" summary. Each problem is a button that opens the tab and
+ * jumps to the field (or the section's submit button / actions table / sign-off table) it is about.
+ */
+function WorkflowError({ error, rca }: { error: Error; rca: Rca }) {
   const problems = error instanceof ApiError ? (error.details.problems as string[] | undefined) : undefined;
+  const jumpInForm = useRcaJump();
+  const navigate = useNavigate();
+  const canOpenForm = !rca.permissions.support;
+  const go = (t: JumpTarget) =>
+    jumpInForm ? jumpInForm(t) : navigate(`/rcas/${rca.id}/edit?${new URLSearchParams({ tab: t.tab, focus: t.ids.join(',') })}`);
+  if (!problems?.length) {
+    return (
+      <div className="w-full basis-full rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert" data-testid="workflow-error">
+        {error.message}
+      </div>
+    );
+  }
   return (
-    <div className="w-full basis-full rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800" role="alert">
-      {problems?.length ? (
-        <>
-          <strong>{error.message.split(':')[0]}:</strong>
-          <ul className="ml-5 list-disc">
-            {problems.map((p) => (
-              <li key={p}>{p}</li>
-            ))}
-          </ul>
-        </>
-      ) : (
-        error.message
-      )}
-    </div>
+    <ProblemList
+      testId="workflow-error"
+      title={error.message.split(':')[0]}
+      problems={problems.map((text) => ({ text, target: canOpenForm ? problemTarget(text) : null }))}
+      onJump={go}
+    />
   );
 }
 

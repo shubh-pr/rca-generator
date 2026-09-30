@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { focusWhenReady, type JumpTarget } from '../../lib/fieldJump';
+import { RcaJumpContext } from './rcaJump';
 import { useBlocker, useParams, useSearchParams } from 'react-router';
 import { SectionBadge } from '../../components/Chips';
 import { ErrorBanner } from '../../components/Form';
@@ -41,37 +43,68 @@ export function RcaEditPage() {
     setParams({ tab: key }, { replace: true });
   };
 
+  /** From a validation summary: same tab switch (and unsaved-changes check), then scroll to and focus the field. */
+  const jump = (t: JumpTarget) => {
+    if (t.tab !== tab) {
+      if (dirty && !confirm(UNSAVED)) return;
+      setDirty(false);
+    }
+    setParams({ tab: t.tab, focus: t.ids.join(',') }, { replace: true });
+  };
+
+  // ?focus=id1,id2 (from a jump, or a link from the read-only view): jump once the tab has rendered, then drop it.
+  const focus = params.get('focus');
+  const loaded = !!rca.data;
+  useEffect(() => {
+    if (!focus || !loaded) return;
+    focusWhenReady(focus.split(','), () =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('focus');
+          return next;
+        },
+        { replace: true },
+      ),
+    );
+  }, [focus, loaded, setParams]);
+
   if (rca.isLoading) return <div className="text-slate-500">Loading…</div>;
   if (rca.error || !rca.data) return <ErrorBanner error={rca.error ?? 'RCA not found'} />;
   const r = rca.data;
 
   return (
-    <div>
-      <BlamelessNote />
-      <RcaTitleBar rca={r} mode="edit" />
-      <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-300" role="tablist">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.key}
-            onClick={() => switchTab(t.key)}
-            className={`-mb-px flex items-center gap-2 rounded-t border px-3 py-2 text-sm ${
-              tab === t.key ? 'border-slate-300 border-b-white bg-white font-semibold text-navy' : 'border-transparent text-slate-600 hover:text-navy'
-            }`}
-          >
-            {t.label}
-            <SectionBadge value={tabStatus(r, t.key)} />
-          </button>
-        ))}
+    <RcaJumpContext.Provider value={jump}>
+      <div>
+        <BlamelessNote />
+        <RcaTitleBar rca={r} mode="edit" />
+        <div className="mb-4 flex flex-wrap gap-1 border-b border-slate-300" role="tablist">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.key}
+              onClick={() => switchTab(t.key)}
+              className={`-mb-px flex items-center gap-2 rounded-t border px-3 py-2 text-sm ${
+                tab === t.key ? 'border-slate-300 border-b-white bg-white font-semibold text-navy' : 'border-transparent text-slate-600 hover:text-navy'
+              }`}
+            >
+              {t.label}
+              <SectionBadge value={tabStatus(r, t.key)} />
+            </button>
+          ))}
+        </div>
+        <p className="mb-2 text-xs text-slate-500" data-testid="required-legend">
+          <span className="font-semibold text-red-600">*</span> Required before “Submit for review”
+        </p>
+        <div className="card">
+          {tab === 'header' && <HeaderTab rca={r} onDirty={setDirty} />}
+          {tab === 'common' && <CommonTab rca={r} onDirty={setDirty} />}
+          {(tab === 'DEV' || tab === 'QA' || tab === 'PROD') && <SectionTab key={tab} rca={r} team={tab} onDirty={setDirty} />}
+          {tab === 'closing' && <ClosingTab rca={r} onDirty={setDirty} />}
+        </div>
       </div>
-      <div className="card">
-        {tab === 'header' && <HeaderTab rca={r} onDirty={setDirty} />}
-        {tab === 'common' && <CommonTab rca={r} onDirty={setDirty} />}
-        {(tab === 'DEV' || tab === 'QA' || tab === 'PROD') && <SectionTab key={tab} rca={r} team={tab} onDirty={setDirty} />}
-        {tab === 'closing' && <ClosingTab rca={r} onDirty={setDirty} />}
-      </div>
-    </div>
+    </RcaJumpContext.Provider>
   );
 }

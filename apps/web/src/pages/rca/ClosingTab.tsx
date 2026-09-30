@@ -61,8 +61,8 @@ export function ClosingTab({ rca, onDirty }: { rca: Rca; onDirty: (d: boolean) =
         <h2>3.3 Attachments</h2>
         <AttachmentsPanel rca={rca} />
       </section>
-      <section className="space-y-3">
-        <h2>3.4 Sign-off</h2>
+      <section className="space-y-3" id="signoffs" tabIndex={-1} aria-labelledby="signoffs-title">
+        <h2 id="signoffs-title">3.4 Sign-off</h2>
         <SignoffTable rca={rca} />
       </section>
     </div>

@@ -9,14 +9,17 @@ interface FieldProps {
   hint?: string;
   className?: string;
   htmlFor?: string;
+  /** Checked by "Submit for review" (red asterisk; see the legend on the RCA form). */
+  required?: boolean;
 }
 
 /** Label (light blue, as in the template) + control + error text. */
-export function Field({ label, error, children, hint, className = '', htmlFor }: FieldProps) {
+export function Field({ label, error, children, hint, className = '', htmlFor, required }: FieldProps) {
   return (
     <div className={className}>
       <label className="label" htmlFor={htmlFor}>
         <span className="inline-block rounded bg-label px-1.5 py-0.5">{label}</span>
+        {required && <RequiredMark />}
       </label>
       {children}
       {hint && !error && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
@@ -137,3 +140,16 @@ export function BillingBlock({ code, message }: { code: string; message: string 
     </div>
   );
 }
+
+/** Red asterisk for fields that "Submit for review" requires; screen readers hear "required before review". */
+export function RequiredMark() {
+  return (
+    <>
+      <span className="ml-1 font-semibold text-red-600" aria-hidden="true" data-testid="required-mark">
+        *
+      </span>
+      <span className="sr-only"> (required before review)</span>
+    </>
+  );
+}
+
