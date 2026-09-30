@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { createRcaViaUi, fillSection, readDownload, signUpAndVerify, STRONG_PASSWORD, tokenFromMail, uniqueEmail } from './helpers';
 
-test('new visitor: sign up, verify email, create and complete an RCA alone, export PDF and DOCX', async ({ browser }) => {
+test('new visitor: sign up, verify email, create and complete an RCA alone, export PDF (Word needs an unlock on the free plan)', async ({ browser }) => {
   const email = uniqueEmail('solo');
   const page = await signUpAndVerify(browser, 'Sam Solo', email);
   await expect(page.getByTestId('verify-banner')).toHaveCount(0);
@@ -24,8 +24,9 @@ test('new visitor: sign up, verify email, create and complete an RCA alone, expo
   await page.goto(rcaPath);
   const [pdf] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'PDF' }).click()]);
   expect((await readDownload(pdf)).subarray(0, 5).toString()).toBe('%PDF-');
-  const [docx] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Word' }).click()]);
-  expect((await readDownload(docx)).subarray(0, 2).toString()).toBe('PK');
+  // Free plan: Word is offered as an unlock (a .docx watermark could be deleted); see wordExport.spec.ts.
+  await expect(page.getByTestId('word-locked')).toContainText('Unlock to get Word');
+  await expect(page.getByRole('button', { name: 'Word', exact: true })).toHaveCount(0);
 
   // The session survives a reload (refresh cookie), and logging out ends it.
   await page.reload();

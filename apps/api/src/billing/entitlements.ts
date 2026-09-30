@@ -25,6 +25,11 @@ export function hasTeam(ws: BillingState, now = new Date()): boolean {
 }
 
 /** Watermark on exports: the RCA was never paid for and its workspace is not subscribed. */
+/** Word (.docx) export: an individually paid RCA, or a workspace with an active subscription. */
+export function wordExportAllowed(rca: { paid_at: Date | null }, ws: BillingState, now = new Date()): boolean {
+  return !!rca.paid_at || isSubscribed(ws, now);
+}
+
 export function needsWatermark(rca: { paid_at: Date | null }, ws: BillingState, now = new Date()): boolean {
   return !rca.paid_at && !isSubscribed(ws, now);
 }

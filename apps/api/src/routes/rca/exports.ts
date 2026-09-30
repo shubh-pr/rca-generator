@@ -12,7 +12,8 @@ import { renderPrintHtml } from '../../export/printHtml.js';
 import { authorize } from '../../policy/policy.js';
 import { loadFullRca } from '../../services/rcaQueries.js';
 import { rcaOf } from './access.js';
-import { needsWatermark } from '../../billing/entitlements.js';
+import { needsWatermark, wordExportAllowed } from '../../billing/entitlements.js';
+import { HttpError } from '../../lib/errors.js';
 
 export const rcaExportsRouter = Router({ mergeParams: true });
 
@@ -35,6 +36,13 @@ rcaExportsRouter.get('/export', async (req, res) => {
   const { rca: row, ctx } = rcaOf(req);
   authorize(ctx, 'rca.export');
   const { format } = parse(z.object({ format: z.enum(['pdf', 'docx']) }), { format: req.query.format });
+  // A .docx is editable, so a watermark in it can simply be deleted: Word is for paid RCAs and
+  // subscribed workspaces only (docs/BILLING_PLAN.md). PDF stays available, watermarked when unpaid.
+  if (format === 'docx' && !wordExportAllowed(row, row.workspace)) {
+    throw new HttpError(403, 'PAYMENT_REQUIRED', 'Word export is available for unlocked RCAs and with a Solo or Team subscription. Unlock this RCA or subscribe to download it as Word.', undefined, {
+      unlock: true,
+    });
+  }
   const rca = await loadFullRca(prisma, row.id);
   const model = buildExportModel(rca, new Date(), { billingWatermark: needsWatermark(row, row.workspace) });
   // Chromium fetches the one-time print page from this same process over loopback.

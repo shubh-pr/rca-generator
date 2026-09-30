@@ -1,6 +1,6 @@
 # RCA Dashboard
 
-A multi-tenant web app for root cause analysis. Anyone can sign up, record an incident, work through the 5 Whys for Dev, QA and Production, track actions, sign off, close the RCA, and export it as PDF or Word in a consistent template layout. You can do everything alone, or invite people and give each of them only the section they own.
+A multi-tenant web app for root cause analysis. Anyone can sign up, record an incident, work through the 5 Whys for Dev, QA and Production, track actions, sign off, close the RCA, and export it as PDF (and Word on paid RCAs or plans) in a consistent template layout. You can do everything alone, or invite people and give each of them only the section they own.
 
 | Document | Contents |
 |---|---|
@@ -92,9 +92,9 @@ Highlights:
 2. On the **welcome** screen, choose *Create my first RCA*, or *Create a sample RCA* to see a complete, labelled example.
 3. Fill in the tabs: Header, Common, Dev, QA, Production, Closing. Each team tab auto-saves every 60 seconds; submit each section when it is done.
 4. **Submit for review**, sign the five sign-off rows (the team rows first), then **Close RCA**.
-5. Use **Print**, **PDF** or **Word** on any RCA. On the RCA list, **Export CSV / Excel** and **Blank template** are available.
+5. Use **Print** or **PDF** on any RCA; **Word** needs the RCA unlocked or a Solo/Team plan (otherwise the button reads **Unlock to get Word**). On the RCA list, **Export CSV / Excel** and **Blank template** are available; logged-out visitors get the blank template after a free sign-up (`/template`).
 6. **Share** an RCA, or create a team workspace under **Workspaces**, and invite people (needs the Team plan) by email with a role (and a team for contributors).
-7. **Plans:** the free plan holds 3 unpaid RCAs per workspace, and their exports carry a watermark. Unlock a single RCA, or subscribe to **Solo** (unlimited, no watermark) or **Team** (adds invitations, per seat) under **Account settings → Billing**. Locally, payments use the mock provider: checkout is a **TEST MODE** page with buttons to simulate success, failure or cancel. See `docs/STRIPE_SETUP.md` to switch to Stripe.
+7. **Plans:** the free plan holds 3 unpaid RCAs per workspace; their print and PDF exports carry a watermark and Word export is not included. Unlock a single RCA, or subscribe to **Solo** (unlimited, no watermark) or **Team** (adds invitations, per seat) under **Account settings → Billing**. Locally, payments use the mock provider: checkout is a **TEST MODE** page with buttons to simulate success, failure or cancel. See `docs/STRIPE_SETUP.md` to switch to Stripe.
 8. **Account settings** has profile, password, sessions, usage, **Download my data**, the security log and **Delete my account**.
 
 ## Deploy

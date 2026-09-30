@@ -14,6 +14,7 @@ import { VerifyEmailPage } from './pages/auth/VerifyEmailPage';
 import { LoginPage } from './pages/LoginPage';
 import { ContactPage, PrivacyPage, TermsPage } from './pages/public/LegalPages';
 import { LandingPage } from './pages/public/LandingPage';
+import { TemplatePage } from './pages/public/TemplatePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { BillingPage } from './pages/settings/BillingPage';
 import { PricingPage } from './pages/billing/PricingPage';
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
       { path: '/privacy', element: <PrivacyPage /> },
       { path: '/contact', element: <ContactPage /> },
       { path: '/pricing', element: <PricingPage /> },
+      { path: '/template', element: <TemplatePage /> },
       { path: '/login', element: <LoginPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/verify-email', element: <VerifyEmailPage /> },

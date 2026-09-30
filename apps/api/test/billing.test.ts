@@ -158,10 +158,49 @@ describe('watermark on every export', () => {
       expect(p).toMatch(/Page \d+ of \d+/);
     }
 
+    // Word: a .docx watermark could simply be deleted, so unpaid + unsubscribed gets no Word file at all.
+    expect(view.body.billing.word_export).toBe(!expected);
     const docx = await api().get(`/api/v1/rcas/${r}/export?format=docx`).set(bearer(owner)).buffer(true).parse(binary);
-    const zip = await JSZip.loadAsync(docx.body as Buffer);
-    const headers = await Promise.all(Object.keys(zip.files).filter((f) => /word\/header\d*\.xml/.test(f)).map((f) => zip.file(f)!.async('string')));
-    expect(headers.join('').includes(BILLING_WATERMARK_TEXT.split(' · ')[0])).toBe(expected);
+    if (expected) {
+      expect(docx.status).toBe(403);
+      expect(JSON.parse((docx.body as Buffer).toString()).error).toBe('PAYMENT_REQUIRED');
+    } else {
+      expect(docx.status).toBe(200);
+      const zip = await JSZip.loadAsync(docx.body as Buffer);
+      const headers = await Promise.all(Object.keys(zip.files).filter((f) => /word\/header\d*\.xml/.test(f)).map((f) => zip.file(f)!.async('string')));
+      expect(headers.join('').includes(BILLING_WATERMARK_TEXT.split(' · ')[0])).toBe(false);
+    }
+  });
+});
+
+describe('Word export is gated by payment (docx is editable, a watermark in it is not a control)', () => {
+  it('unpaid RCA in an unsubscribed workspace: 403 PAYMENT_REQUIRED, no file, no export recorded; PDF still works', async () => {
+    const r = (await create()).body.id;
+    const res = await api().get(`/api/v1/rcas/${r}/export?format=docx`).set(bearer(owner));
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ error: 'PAYMENT_REQUIRED', details: { unlock: true } });
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(await raw(() => db.auditLog.count({ where: { rca_id: r, action: 'EXPORT' } }))).toBe(0);
+    expect((await api().get(`/api/v1/rcas/${r}/export?format=pdf`).set(bearer(owner))).status).toBe(200);
+  });
+
+  it('paid RCA and subscribed workspace: Word succeeds without a watermark; a lapsed subscription closes it again unless the RCA was paid', async () => {
+    const paid = (await create()).body.id;
+    const other = (await create()).body.id;
+    await unlock(paid);
+    expect((await api().get(`/api/v1/rcas/${paid}/export?format=docx`).set(bearer(owner))).status).toBe(200);
+    expect((await api().get(`/api/v1/rcas/${other}/export?format=docx`).set(bearer(owner))).status).toBe(403);
+    await subscribe(ws, 'SOLO', 0, 'sub_word');
+    expect((await api().get(`/api/v1/rcas/${other}/export?format=docx`).set(bearer(owner))).status).toBe(200);
+    await subscriptionEvent(ws, 'SUBSCRIPTION_CANCELED');
+    expect((await api().get(`/api/v1/rcas/${other}/export?format=docx`).set(bearer(owner))).status).toBe(403);
+    expect((await api().get(`/api/v1/rcas/${paid}/export?format=docx`).set(bearer(owner))).status).toBe(200);
+  });
+
+  it('permission and tenancy checks still come first (a stranger gets 404, not a payment prompt)', async () => {
+    const r = (await create()).body.id;
+    const stranger = await createUser('Stranger');
+    expect((await api().get(`/api/v1/rcas/${r}/export?format=docx`).set(bearer(stranger))).status).toBe(404);
   });
 });
 

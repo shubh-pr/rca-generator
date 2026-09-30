@@ -8,20 +8,28 @@ import { createRcaViaUi, readDownload, signUpAndVerify, subscribeTeamViaUi, toke
 
 const WATERMARK = 'FREE PLAN';
 
-/** Does this RCA's export carry the billing watermark? Checks the Word file and the print (PDF source) page. */
+/**
+ * Does this RCA's export carry the billing watermark? The print page (the PDF's source) is checked;
+ * on the free plan Word is not offered at all (a .docx watermark could be deleted), so a watermarked
+ * RCA must show "Unlock to get Word", and an unwatermarked one must download a clean Word file.
+ */
 async function exportWatermarked(page: Page, rcaPath: string): Promise<boolean> {
-  await page.goto(rcaPath);
-  const [docx] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Word' }).click()]);
-  const zip = await JSZip.loadAsync(await readDownload(docx));
-  const headers = await Promise.all(Object.keys(zip.files).filter((f) => /word\/header\d*\.xml/.test(f)).map((f) => zip.file(f)!.async('string')));
-  const inDocx = headers.join('').includes(WATERMARK);
-
   await page.goto(`${rcaPath}/print`);
   const frame = page.frameLocator('iframe[title="RCA print view"]');
   await expect(frame.locator('h1')).toHaveText('Root Cause Analysis (RCA)');
   const inPrint = (await frame.locator('[data-billing-watermark]').count()) > 0;
-  expect(inPrint, 'print page and Word file disagree about the watermark').toBe(inDocx);
-  return inDocx;
+
+  await page.goto(rcaPath);
+  await expect(page.getByRole('button', { name: 'PDF' })).toBeVisible();
+  const wordLocked = (await page.getByTestId('word-locked').count()) > 0;
+  expect(wordLocked, 'Word must be locked exactly when the print/PDF is watermarked').toBe(inPrint);
+  if (!wordLocked) {
+    const [docx] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Word', exact: true }).click()]);
+    const zip = await JSZip.loadAsync(await readDownload(docx));
+    const headers = await Promise.all(Object.keys(zip.files).filter((f) => /word\/header\d*\.xml/.test(f)).map((f) => zip.file(f)!.async('string')));
+    expect(headers.join('').includes(WATERMARK), 'a Word file must never carry the free-plan watermark').toBe(false);
+  }
+  return inPrint;
 }
 
 async function bucketText(page: Page) {

@@ -4,18 +4,19 @@ import pdf from 'pdf-parse/lib/pdf-parse.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { closePdfBrowser } from '../src/export/pdf.js';
 import {
+  type Actor,
+  MEMBER_KEYS,
+  type RoleKey,
   api,
   bearer,
   createRca,
   createTeam,
+  createUser,
   db as prisma,
-  MEMBER_KEYS,
   prepareForReview,
   raw,
   resetDb,
   signAll,
-  type Actor,
-  type RoleKey,
 } from './helpers.js';
 
 let a: Record<RoleKey, Actor>;
@@ -203,6 +204,18 @@ describe('DOCX export', () => {
     const zip = await JSZip.loadAsync(blank.body as Buffer);
     const text = (await zip.file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, '');
     expectInOrder(text, ORDER);
+  });
+
+  it('blank template: needs an account (anonymous 401), but not a verified email; free accounts get it', async () => {
+    expect((await api().get('/api/v1/templates/rca-blank.docx')).status).toBe(401);
+    const unverified = await createUser('Fresh Signup', { verified: false });
+    const verified = await createUser('Verified Free');
+    for (const who of [unverified, verified]) {
+      const res = await api().get('/api/v1/templates/rca-blank.docx').set(bearer(who)).buffer(true).parse(binary);
+      expect(res.status).toBe(200);
+      expect(res.headers['content-disposition']).toContain('RCA_Template.docx');
+      expect((res.body as Buffer).subarray(0, 2).toString()).toBe('PK');
+    }
   });
 });
 

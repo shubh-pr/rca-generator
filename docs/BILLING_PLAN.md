@@ -102,7 +102,8 @@ Everything below is implemented with `fetch` against the Stripe REST API, so no 
 | **Invites without active Team** give 403 `SUBSCRIPTION_REQUIRED` (workspace and RCA invitations) | workspaces and collaborators routes |
 | **Collaborators without active Team** are read-only: anyone other than the workspace's primary owner (members, co-owners, direct RCA collaborators) is capped to VIEWER. They are never removed | `policy/access.ts` caps the effective role; `permissions.read_only_reason = 'SUBSCRIPTION_INACTIVE'` |
 | **`PAST_DUE` / `CANCELED`:** entitlement ends, so the bucket and watermark apply again from now on. Paid RCAs stay unlocked, collaborators become read-only, and the owner sees a warning (`GET /billing/alerts` feeds a banner) | entitlements |
-| **Watermark:** any export (print, PDF, DOCX, and PDFs in "export my data") of an RCA that is unpaid **and** in a non-entitled workspace gets a free-plan watermark. It is a fixed, repeating, light band on every page plus a header note in DOCX, alongside the existing DRAFT watermark, and does not change the Section 7 layout | `export/model.ts` `billingWatermark`, `printHtml.ts`, `docx.ts` |
+| **Watermark:** print, PDF and the PDFs in "export my data" of an RCA that is unpaid **and** in a non-entitled workspace get a free-plan watermark. It is a fixed, repeating, light band on every page, alongside the existing DRAFT watermark, and does not change the Section 7 layout | `export/model.ts` `billingWatermark`, `printHtml.ts` |
+| **Word (.docx) export:** only for an individually paid RCA or an entitled workspace. Otherwise the API answers **403 `PAYMENT_REQUIRED`** and the UI shows **Unlock to get Word** instead of the Word button (section 9) | `entitlements.ts` `wordExportAllowed`, `routes/rca/exports.ts`, `ExportButtons.tsx` |
 | **Pricing:** one config object from env: `BILLING_CURRENCY` (USD), `RCA_UNLOCK_PRICE_CENTS`, `SOLO_MONTHLY_PRICE_CENTS`, `TEAM_BASE_PRICE_CENTS`, `TEAM_SEAT_PRICE_CENTS`, `FREE_RCA_LIMIT`. Test defaults are 900 / 1200 / 2900 / 800 / 3 | `billing/pricing.ts`, `GET /billing/pricing` |
 
 ## 4. Data model (migration `phase8_billing`)
@@ -143,7 +144,7 @@ Every one of these is covered by the tenant-isolation suite (B gets 404 on A's R
 ## 7. Tests (mock provider only; no external calls)
 
 - **Bucket:** 3 allowed, the 4th gives `BUCKET_FULL`; delete frees a slot; paying frees a slot permanently, even after a subscription is canceled; the sample RCA counts; concurrent creates cannot exceed the limit.
-- **Watermark matrix:** {paid, unpaid} × {subscribed, unsubscribed} for print HTML, PDF text on every page, and the DOCX header.
+- **Watermark matrix:** {paid, unpaid} × {subscribed, unsubscribed} for print HTML and PDF text on every page. DOCX: 403 `PAYMENT_REQUIRED` when unpaid and unsubscribed, otherwise a file without a watermark.
 - **Idempotency:** the same signed webhook event posted twice is processed once (one history row, one audit row). A tampered signature gives 400.
 - **Subscriptions:** Solo removes the cap. `PAST_DUE` and `CANCELED` bring back the cap and watermark from then on, while paid RCAs stay unlocked, collaborators become read-only (view 200, edit 403) and the owner sees an alert. Renewal extends the period. An expired period ends entitlement even without an event.
 - **Invites:** blocked without Team (Solo and none give 403 `SUBSCRIPTION_REQUIRED`), allowed with Team, and 403 `SEAT_LIMIT_REACHED` when seats are used up.
@@ -174,3 +175,22 @@ Files that do **not** change: `billing/types.ts` (the contract), `billing/events
 ### Mock checkout sessions
 
 A mock session is completed once. A simulated failure marks it `FAILED` (as `checkout.session.async_payment_failed` would), and the TEST MODE page then offers **Start over**, which creates a fresh session. This keeps one provider outcome per session, which is how the Stripe mapping works as well.
+
+## 9. Decisions: Word export and the blank template
+
+These are deliberate. Please don't "fix" them by hardening the watermark or opening the downloads up again.
+
+### Word export is gated, not watermarked
+- **Why:** a `.docx` is an editable document. Any watermark in it, whether a header, a shape or a background, can be selected and deleted in Word in seconds. No in-document watermark can be made tamper-proof in that format, so a watermarked free Word export would give away the paid, unwatermarked result.
+- **Rule:** Word export is available for an **individually paid RCA** or any RCA in a workspace with an **active Solo or Team subscription**. It is checked on the server (`GET /rcas/:id/export?format=docx` → 403 `PAYMENT_REQUIRED`, `details.unlock = true`), not only by hiding the button. Permission and tenant checks still run first, so a stranger gets 404, not a payment prompt.
+- **Free plan UI:** **Unlock to get Word** replaces the Word button. For owners and editors it starts the same unlock checkout as the watermark bar; others are sent to Pricing.
+- **What stays open:** print and PDF remain available to everyone, watermarked when unpaid. PDF is fine to give away because removing its watermark takes real effort, and the watermark stays visible on anything shared or printed.
+- **Lapses:** when a subscription is past due or canceled, Word closes again for unpaid RCAs. RCAs bought individually keep Word.
+
+### Blank template: free signup, no payment, no email verification
+- **Rule:** the editable blank template (`GET /templates/rca-blank.docx`) needs a **logged-in account of any kind**, including an unverified one. Anonymous requests get 401.
+- **Logged-out visitors:** "Download the blank RCA template" (landing page → `/template`) takes them to sign-up (`/signup?next=/template`). The confirmation screen offers **Log in to download now**, and after logging in the download starts by itself.
+- **Why an account and not payment:** this is lead capture. Similar products (Notion, HubSpot and others) ask for a free signup to download templates. It turns an anonymous drive-by into a known contact without asking for money at the moment of highest intent, and keeps the funnel warm instead of losing the visitor.
+- **Why not email verification:** verification adds friction at exactly that moment, and it protects nothing here, because the template contains no one's data. Verification is still required to create RCAs.
+- **Why the visitor logs in instead of being signed in automatically:** signup deliberately returns the same response for new and existing addresses and never starts a session. Signing someone in straight after signup would reveal whether an email already has an account (see `docs/ASSUMPTIONS.md`, authentication). So the flow asks for one login with the password just chosen, and unverified accounts can log in.
+

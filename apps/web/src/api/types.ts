@@ -222,7 +222,8 @@ export interface Rca extends Omit<RcaSummary, 'sections' | 'workspace'> {
   signoffs: Signoff[];
   permissions: RcaPermissions;
   paid_at: string | null;
-  billing: { paid: boolean; paid_at: string | null; workspace_subscribed: boolean; watermarked: boolean };
+  /** word_export: .docx allowed (paid RCA or subscribed workspace); unpaid RCAs get PDF with a watermark. */
+  billing: { paid: boolean; paid_at: string | null; workspace_subscribed: boolean; watermarked: boolean; word_export: boolean };
 }
 
 export interface AuditEntry {
