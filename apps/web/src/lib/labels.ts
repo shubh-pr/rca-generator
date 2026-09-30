@@ -47,7 +47,13 @@ export const SECTION_STATUS_LABEL: Record<SectionStatus, string> = {
   SUBMITTED: 'Submitted',
 };
 
-export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = SECTION_STATUS_LABEL as Record<ActionStatus, string>;
+// Actions and the section's completion status have their own values (COMPLETED, not SUBMITTED), so
+// they get their own labels. Record<ActionStatus, …> makes a missing label a type error.
+export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
+  NOT_STARTED: 'Not started',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+};
 
 export const ENV_LABEL: Record<Environment, string> = { PROD: 'Production', UAT: 'UAT', STAGING: 'Staging' };
 

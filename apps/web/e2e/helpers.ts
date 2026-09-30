@@ -39,7 +39,7 @@ export async function fillSection(page: Page, rcaPath: string, team: 'DEV' | 'QA
   await actions.getByLabel('Action').fill(`${team} corrective action`);
   await actions.getByLabel('Owner').selectOption({ label: ownerName });
   await actions.getByLabel('Due date').fill('2026-12-31');
-  await actions.getByLabel('Status').selectOption('COMPLETED');
+  await actions.getByLabel('Status').selectOption({ label: 'Completed' });
   await actions.getByLabel('Completed on').fill('2026-12-01');
   await actions.getByRole('button', { name: 'Save' }).click();
   await expect(actions.getByRole('button', { name: 'Delete' })).toBeVisible();
