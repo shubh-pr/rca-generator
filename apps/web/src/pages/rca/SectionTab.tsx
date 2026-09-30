@@ -172,7 +172,15 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       </div>
 
       {!mayEdit && <ReadOnlyNote text={`Only owners, editors and the ${TEAM_LABEL[team]} contributor can edit this section.`} />}
-      {mayEdit && submitted && <ReadOnlyNote text="This section is submitted and locked. An owner or editor can unlock it." />}
+      {mayEdit && submitted && (
+        <ReadOnlyNote
+          text={
+            rca.permissions.role === 'CONTRIBUTOR'
+              ? `Your ${TEAM_LABEL[team]} section was submitted${section.updated_by_user ? ` by ${section.updated_by_user.name}` : ''} and is locked, so there is nothing for you to edit here right now. Ask an owner or editor to unlock it.`
+              : `The ${TEAM_LABEL[team]} section is submitted and locked. Use Unlock to make changes${rca.status === 'DRAFT' ? '' : ' (only while the RCA is a draft)'}.`
+          }
+        />
+      )}
       {conflict ? (
         <div className="flex items-center justify-between rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
           <span data-testid={`conflict-${team}`}>{(save.error ?? submit.error)?.message} Your unsaved edits here will be discarded.</span>

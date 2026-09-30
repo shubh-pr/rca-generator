@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { currentUser } from '../auth/index.js';
 import { securityEvent } from '../auth/security.js';
+import { accessAudit, personRef } from '../services/accessAudit.js';
 import { prisma } from '../db.js';
 import { writeAudit } from '../lib/audit.js';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
@@ -92,6 +93,51 @@ async function ownerCount(workspaceId: string) {
   return prisma.workspaceMember.count({ where: { workspace_id: workspaceId, role: 'OWNER' } });
 }
 
+/**
+ * People with access, in one place (owners): workspace members, collaborators of each RCA in the
+ * workspace, and pending invitations to the workspace or any of its RCAs. For contributors the
+ * status of their section shows whether it is locked (submitted) so the owner can unlock it.
+ */
+workspacesRouter.get('/workspaces/:wid/access', async (req, res) => {
+  const { ws } = await workspaceFor(req, 'members.manage');
+  const user = { select: { id: true, name: true, email: true, deleted_at: true } } as const;
+  const [members, collaborators, pending] = await Promise.all([
+    prisma.workspaceMember.findMany({ where: { workspace_id: ws.id }, include: { user }, orderBy: { created_at: 'asc' } }),
+    prisma.rcaCollaborator.findMany({
+      where: { rca: { workspace_id: ws.id, is_deleted: false } },
+      include: { user, rca: { select: { id: true, rca_number: true, summary: true, status: true, sections: { select: { team: true, section_status: true } } } } },
+      orderBy: [{ rca: { rca_number: 'asc' } }, { created_at: 'asc' }],
+    }),
+    prisma.invitation.findMany({
+      where: { accepted_at: null, revoked_at: null, expires_at: { gt: new Date() }, OR: [{ workspace_id: ws.id }, { rca: { workspace_id: ws.id, is_deleted: false } }] },
+      include: { rca: { select: { id: true, rca_number: true } } },
+      orderBy: { created_at: 'desc' },
+    }),
+  ]);
+  res.json({
+    members: members
+      .filter((m) => !m.user.deleted_at)
+      .map((m) => ({ user_id: m.user.id, name: m.user.name, email: m.user.email, role: m.role, team: m.team, is_primary_owner: m.user.id === ws.owner_id })),
+    collaborators: collaborators
+      .filter((c) => !c.user.deleted_at)
+      .map((c) => {
+        const section = c.team ? c.rca.sections.find((s) => s.team === c.team) : undefined;
+        return {
+          user_id: c.user.id,
+          name: c.user.name,
+          email: c.user.email,
+          role: c.role,
+          team: c.team,
+          rca: { id: c.rca.id, rca_number: c.rca.rca_number, summary: c.rca.summary, status: c.rca.status },
+          section_status: section?.section_status ?? null,
+          // A contributor whose only editable section is submitted (or whose RCA is closed) cannot edit anything.
+          nothing_to_edit: c.role === 'CONTRIBUTOR' && (section?.section_status === 'SUBMITTED' || c.rca.status !== 'DRAFT'),
+        };
+      }),
+    pending: pending.map((i) => ({ id: i.id, email: i.email, role: i.role, team: i.team, expires_at: i.expires_at, target: i.rca ? { rca_id: i.rca.id, rca_number: i.rca.rca_number } : null })),
+  });
+});
+
 workspacesRouter.patch('/workspaces/:wid/members/:uid', async (req, res) => {
   const { me, ws } = await workspaceFor(req, 'members.manage');
   const { uid } = parse(z.object({ uid: zUuid }), { uid: req.params.uid });
@@ -105,6 +151,14 @@ workspacesRouter.patch('/workspaces/:wid/members/:uid', async (req, res) => {
   }
   const updated = await prisma.workspaceMember.update({ where: { id: member.id }, data: { role: body.role, team: body.team ?? null } });
   await securityEvent(me.id, 'ROLE_CHANGE', { workspace_id: ws.id, user_id: uid, from: member.role, to: body.role, team: body.team ?? null }, req);
+  await accessAudit({
+    action: 'ROLE_CHANGE',
+    entity: 'workspace_members',
+    entity_id: member.id,
+    target: { rca_id: null, workspace_id: ws.id },
+    user_id: me.id,
+    detail: { person: await personRef(uid), from: { role: member.role, team: member.team }, to: { role: body.role, team: body.team ?? null } },
+  });
   res.json(updated);
 });
 
@@ -124,6 +178,14 @@ workspacesRouter.delete('/workspaces/:wid/members/:uid', async (req, res) => {
     await tx.rcaSignoff.updateMany({ where: { assignee_user_id: uid, signed_at: null, rca: { workspace_id: ws.id } }, data: { assignee_user_id: null } });
   });
   await securityEvent(me.id, 'MEMBER_REMOVE', { workspace_id: ws.id, user_id: uid }, req);
+  await accessAudit({
+    action: 'MEMBER_REMOVE',
+    entity: 'workspace_members',
+    entity_id: member.id,
+    target: { rca_id: null, workspace_id: ws.id },
+    user_id: me.id,
+    detail: { person: await personRef(uid), role: member.role, team: member.team, left: uid === me.id },
+  });
   res.status(204).end();
 });
 
@@ -174,6 +236,14 @@ workspacesRouter.delete('/workspaces/:wid/invitations/:iid', async (req, res) =>
   if (!inv) throw notFound('Invitation not found');
   await prisma.invitation.update({ where: { id: iid }, data: { revoked_at: new Date() } });
   await securityEvent(me.id, 'INVITE_REVOKE', { invitation_id: iid, workspace_id: ws.id }, req);
+  await accessAudit({
+    action: 'INVITE_REVOKE',
+    entity: 'invitations',
+    entity_id: iid,
+    target: { rca_id: null, workspace_id: ws.id },
+    user_id: me.id,
+    detail: { invitation_id: iid, email: inv.email, role: inv.role, team: inv.team },
+  });
   res.status(204).end();
 });
 

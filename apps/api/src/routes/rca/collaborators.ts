@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { currentUser } from '../../auth/index.js';
 import { securityEvent } from '../../auth/security.js';
+import { accessAudit, personRef } from '../../services/accessAudit.js';
 import { prisma } from '../../db.js';
 import { notFound } from '../../lib/errors.js';
 import { parse, zUuid } from '../../lib/validate.js';
@@ -21,7 +22,23 @@ collaboratorsRouter.get('/collaborators', async (req, res) => {
   const { rca, ctx } = rcaOf(req);
   authorize(ctx, 'collaborators.view');
   const rows = await prisma.rcaCollaborator.findMany({ where: { rca_id: rca.id }, include: { user: { select: { id: true, name: true, email: true } } }, orderBy: { created_at: 'asc' } });
-  res.json({ data: rows.map((c) => ({ user_id: c.user.id, name: c.user.name, email: c.user.email, role: c.role, team: c.team })) });
+  // Read fresh on every open: a contributor whose section is submitted (or whose RCA is not a draft) has nothing to edit.
+  const sections = await prisma.rcaTeamSection.findMany({ where: { rca_id: rca.id }, select: { team: true, section_status: true } });
+  const status = await prisma.rca.findUniqueOrThrow({ where: { id: rca.id }, select: { status: true } });
+  res.json({
+    data: rows.map((c) => {
+      const section = c.team ? sections.find((s) => s.team === c.team) : undefined;
+      return {
+        user_id: c.user.id,
+        name: c.user.name,
+        email: c.user.email,
+        role: c.role,
+        team: c.team,
+        section_status: section?.section_status ?? null,
+        nothing_to_edit: c.role === 'CONTRIBUTOR' && (section?.section_status === 'SUBMITTED' || status.status !== 'DRAFT'),
+      };
+    }),
+  });
 });
 
 collaboratorsRouter.patch('/collaborators/:uid', async (req, res) => {
@@ -35,6 +52,14 @@ collaboratorsRouter.patch('/collaborators/:uid', async (req, res) => {
   if (!c) throw notFound('Collaborator not found');
   const updated = await prisma.rcaCollaborator.update({ where: { id: c.id }, data: { role: body.role, team: body.team ?? null } });
   await securityEvent(me.id, 'ROLE_CHANGE', { rca_id: rca.id, user_id: uid, from: c.role, to: body.role, team: body.team ?? null }, req);
+  await accessAudit({
+    action: 'ROLE_CHANGE',
+    entity: 'rca_collaborators',
+    entity_id: c.id,
+    target: { rca_id: rca.id, workspace_id: rca.workspace_id },
+    user_id: me.id,
+    detail: { person: await personRef(uid), from: { role: c.role, team: c.team }, to: { role: body.role, team: body.team ?? null } },
+  });
   res.json(updated);
 });
 
@@ -50,6 +75,14 @@ collaboratorsRouter.delete('/collaborators/:uid', async (req, res) => {
     await tx.rcaSignoff.updateMany({ where: { rca_id: rca.id, assignee_user_id: uid, signed_at: null }, data: { assignee_user_id: null } });
   });
   await securityEvent(me.id, 'MEMBER_REMOVE', { rca_id: rca.id, user_id: uid }, req);
+  await accessAudit({
+    action: 'MEMBER_REMOVE',
+    entity: 'rca_collaborators',
+    entity_id: c.id,
+    target: { rca_id: rca.id, workspace_id: rca.workspace_id },
+    user_id: me.id,
+    detail: { person: await personRef(uid), role: c.role, team: c.team },
+  });
   res.status(204).end();
 });
 
@@ -86,5 +119,13 @@ collaboratorsRouter.delete('/invitations/:iid', async (req, res) => {
   if (!inv) throw notFound('Invitation not found');
   await prisma.invitation.update({ where: { id: iid }, data: { revoked_at: new Date() } });
   await securityEvent(me.id, 'INVITE_REVOKE', { invitation_id: iid, rca_id: rca.id }, req);
+  await accessAudit({
+    action: 'INVITE_REVOKE',
+    entity: 'invitations',
+    entity_id: iid,
+    target: { rca_id: rca.id, workspace_id: rca.workspace_id },
+    user_id: me.id,
+    detail: { invitation_id: iid, email: inv.email, role: inv.role, team: inv.team },
+  });
   res.status(204).end();
 });

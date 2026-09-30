@@ -6,7 +6,7 @@ import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { notFound } from '../lib/errors.js';
 import { parse } from '../lib/validate.js';
-import { acceptInvitation, lookupInvitation, maskEmail } from '../services/invitations.js';
+import { acceptInvitation, logDeadInvitationLink, lookupInvitation, maskEmail } from '../services/invitations.js';
 import { unscoped } from '../tenancy/context.js';
 
 /** Invitation links: a public lookup (no RCA or workspace content) and an authenticated accept. */
@@ -18,7 +18,10 @@ invitationsRouter.get('/invitations/lookup', async (req, res) => {
   enforce([{ key: `invite-lookup:ip:${req.ip}`, limit: config.rateLimit.emailPerIp * 10, windowMs: HOUR }]);
   const { token } = parse(tokenSchema, { token: req.query.token });
   const inv = await lookupInvitation(token);
-  if (!inv) throw notFound('This invitation is invalid, expired or was already used');
+  if (!inv) {
+    await logDeadInvitationLink(token);
+    throw notFound('This invitation is invalid, expired or was already used');
+  }
   const hasAccount = !!(await unscoped('invitation lookup', () => prisma.user.findUnique({ where: { email: inv.email }, select: { id: true } })));
   res.json({
     target: inv.workspace_id ? 'workspace' : 'rca',

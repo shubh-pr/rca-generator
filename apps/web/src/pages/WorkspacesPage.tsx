@@ -10,6 +10,7 @@ import { useAuth } from '../lib/auth';
 import { formatDateTime } from '../lib/dates';
 import { ROLE_LABEL, TEAM_LABEL, TEAMS, WORKSPACE_ROLES } from '../lib/labels';
 import { useWorkspace } from '../lib/workspace';
+import { PeopleWithAccess } from './workspace/PeopleWithAccess';
 
 /** List of the user's workspaces, and creating a shared one for a team. */
 export function WorkspacesPage() {
@@ -138,6 +139,7 @@ export function WorkspaceDetailPage() {
         <h1>{ws.name}</h1>
         <p className="text-sm text-slate-600">Your role: {ROLE_LABEL[ws.role]}</p>
       </div>
+      {isOwner && <PeopleWithAccess workspaceId={ws.id} />}
       <div className="card space-y-3">
         <h2>Members</h2>
         <ErrorBanner error={members.error ?? changeRole.error ?? remove.error ?? transfer.error} />

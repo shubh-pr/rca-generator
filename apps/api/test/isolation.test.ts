@@ -195,6 +195,7 @@ describe('tenant isolation', () => {
     const W = `/api/v1/workspaces/${A.personalWorkspaceId}`;
     const cases: [string, string, object?][] = [
       ['get', `${W}/members`],
+      ['get', `${W}/access`],
       ['patch', `${W}/members/${A.id}`, { role: 'VIEWER' }],
       ['delete', `${W}/members/${A.id}`],
       ['post', `${W}/transfer`, { user_id: B.id }],

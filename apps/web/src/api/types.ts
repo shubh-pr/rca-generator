@@ -247,6 +247,16 @@ export interface Member {
   role: WorkspaceRole;
   team: Team | null;
   is_primary_owner?: boolean;
+  /** RCA collaborators: status of their team section; true when a contributor cannot edit anything (section submitted, or RCA not a draft). */
+  section_status?: SectionStatus | null;
+  nothing_to_edit?: boolean;
+}
+
+/** GET /workspaces/:wid/access: everyone with access to the workspace or any of its RCAs (owners). */
+export interface AccessOverview {
+  members: Member[];
+  collaborators: (Member & { rca: { id: string; rca_number: string; summary: string; status: RcaStatus } })[];
+  pending: { id: string; email: string; role: WorkspaceRole; team: Team | null; expires_at: string; target: { rca_id: string; rca_number: string } | null }[];
 }
 
 export interface PendingInvitation {
