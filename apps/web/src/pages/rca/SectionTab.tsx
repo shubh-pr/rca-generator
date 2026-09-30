@@ -13,6 +13,7 @@ import { useDirtyForm } from '../../lib/useDirtyForm';
 import { ActionsTable } from './ActionsTable';
 import { ReadOnlyNote } from './HeaderTab';
 import { rcaKey, useRcaMutation } from './rcaApi';
+import { sectionWriter } from './sectionWriter';
 
 const AUTOSAVE_MS = 60_000;
 
@@ -73,13 +74,23 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
 
   useEffect(() => onDirty(form.dirty), [form.dirty, onDirty]);
 
-  const save = useRcaMutation(rca.id, () => api.put<TeamSection>(`/rcas/${rca.id}/sections/${team}`, toBody(v, section.version)));
+  // Every write of this section from this tab is queued and carries the newest known version
+  // (sectionWriter.ts), so Save draft, auto-save and Submit never race each other into a false 409.
+  const writer = sectionWriter(rca.id, team, section.version);
+  // A queued write sends the values as they are when it runs (the latest edits), not when it was queued.
+  const valuesRef = useRef(v);
+  valuesRef.current = v;
+  const lastSent = useRef<string | null>(null);
+  const putDraft = (version: number) => {
+    lastSent.current = JSON.stringify(valuesRef.current);
+    return api.put<TeamSection>(`/rcas/${rca.id}/sections/${team}`, toBody(valuesRef.current, version));
+  };
+  const save = useRcaMutation(rca.id, () => writer.run(putDraft));
   const submit = useRcaMutation(rca.id, async () => {
-    let version = section.version;
-    if (form.dirty) version = (await api.put<TeamSection>(`/rcas/${rca.id}/sections/${team}`, toBody(v, section.version))).version;
-    return api.post(`/rcas/${rca.id}/sections/${team}/submit`, { version });
+    if (form.dirty && JSON.stringify(valuesRef.current) !== lastSent.current) await writer.run(putDraft);
+    return writer.run((version) => api.post<TeamSection>(`/rcas/${rca.id}/sections/${team}/submit`, { version }));
   });
-  const unlock = useRcaMutation(rca.id, () => api.post(`/rcas/${rca.id}/sections/${team}/reopen`));
+  const unlock = useRcaMutation(rca.id, () => writer.run(() => api.post<TeamSection>(`/rcas/${rca.id}/sections/${team}/reopen`)));
 
   const label = `${TEAM_LABEL[team]} section`;
   const fb = useSaveFeedback();
@@ -117,8 +128,8 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
   const reload = async () => {
     save.reset();
     submit.reset();
+    form.discardOnNextSync(); // Reload means: take the server's version, drop local edits
     await qc.invalidateQueries({ queryKey: rcaKey(rca.id) });
-    form.reset();
   };
 
   return (
@@ -164,7 +175,7 @@ export function SectionTab({ rca, team, onDirty }: { rca: Rca; team: Team; onDir
       {mayEdit && submitted && <ReadOnlyNote text="This section is submitted and locked. An owner or editor can unlock it." />}
       {conflict ? (
         <div className="flex items-center justify-between rounded border border-amber-400 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-          <span>This section was changed by someone else. Reload to get the latest version (your unsaved edits will be discarded).</span>
+          <span data-testid={`conflict-${team}`}>{(save.error ?? submit.error)?.message} Your unsaved edits here will be discarded.</span>
           <button type="button" className="btn-secondary" onClick={reload}>
             Reload
           </button>

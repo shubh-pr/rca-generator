@@ -294,3 +294,9 @@ Details and reasons: `docs/BILLING_PLAN.md`, section 9.
 - **Word export needs payment.** It is available for a paid RCA or a subscribed workspace only (403 `PAYMENT_REQUIRED` otherwise), because a watermark in an editable `.docx` can simply be deleted. Print and PDF stay open, watermarked when unpaid.
 - **The blank template needs any account.** Unverified accounts are fine. Signup still never starts a session (no account enumeration), so a logged-out visitor signs up and then logs in once, after which the download starts by itself.
 
+## Section saves and version conflicts
+
+- **One writer per section per tab.** Save draft, the 60-second auto-save, Submit section and Unlock are queued per RCA section in the browser (`apps/web/src/pages/rca/sectionWriter.ts`). They run one at a time, and each sends the newest version the tab knows, including the version the previous write returned. A tab can never conflict with itself. As a safety net, a 409 that names a version this tab produced is retried once, silently.
+- **A real conflict says who.** A 409 `VERSION_CONFLICT` comes from another tab or another person. It includes `changed_by_self` and `changed_by_name`, and the message reads "This section was saved from another tab or window since you opened it here" or "<name> changed this section since you opened it". Reload takes the server version and drops local edits; that is its purpose.
+- **Refetched values merge; they don't overwrite.** When a form receives new server values, fields the user has not touched take the server value and fields edited locally keep the edit (`useDirtyForm`). This applies to every RCA form. Before this, text typed while a save was in flight was silently replaced by the server's copy.
+

@@ -57,8 +57,18 @@ function ensureNotSubmitted(section: { section_status: string }) {
   }
 }
 
-const versionConflict = (current?: number) =>
-  conflict('Section was changed by someone else. Reload to get the latest version.', current ? { current_version: current } : undefined, 'VERSION_CONFLICT');
+/**
+ * 409 for a stale version. It says who saved in between, so a solo user who has the RCA open in two
+ * tabs is not told "someone else" (details.changed_by_self, details.changed_by_name).
+ */
+async function versionConflict(rcaId: string, team: Team, meId: string) {
+  const s = await loadSection(prisma, rcaId, team);
+  const self = s.updated_by === meId;
+  const message = self
+    ? 'This section was saved from another tab or window since you opened it here. Reload to continue.'
+    : `${s.updated_by_user?.name ?? 'Someone else'} changed this section since you opened it. Reload to get the latest version.`;
+  return conflict(message, { current_version: s.version, changed_by_self: self, changed_by_name: self ? null : (s.updated_by_user?.name ?? null) }, 'VERSION_CONFLICT');
+}
 
 async function ensureParticipant(rca: { id: string; workspace_id: string }, userId: string | null | undefined, field: string) {
   if (!userId) return;
@@ -81,7 +91,7 @@ sectionsRouter.put('/sections/:team', async (req, res) => {
   ensureRcaEditable(rca);
   const current = await loadSection(prisma, rca.id, team);
   ensureNotSubmitted(current);
-  if (current.version !== version) throw versionConflict(current.version);
+  if (current.version !== version) throw await versionConflict(rca.id, team, me.id);
 
   // SPEC 3.3: completion status COMPLETED requires an actual date and Verified by.
   const completion = fields.completion_status ?? current.completion_status;
@@ -98,7 +108,7 @@ sectionsRouter.put('/sections/:team', async (req, res) => {
       where: { id: current.id, version },
       data: { ...fields, section_status: 'IN_PROGRESS', version: { increment: 1 }, updated_by: me.id },
     });
-    if (updated.count === 0) throw versionConflict();
+    if (updated.count === 0) throw await versionConflict(rca.id, team, me.id);
     for (const w of whys ?? []) {
       await tx.rcaWhy.updateMany({ where: { section_id: current.id, why_no: w.why_no }, data: { answer: w.answer } });
     }
@@ -138,7 +148,7 @@ sectionsRouter.post('/sections/:team/submit', async (req, res) => {
   if (rca.status !== 'DRAFT') throw conflict(`RCA is ${rca.status}; sections can only be submitted while it is DRAFT`);
   const s = await loadSection(prisma, rca.id, team);
   ensureNotSubmitted(s);
-  if (version !== undefined && version !== s.version) throw versionConflict(s.version);
+  if (version !== undefined && version !== s.version) throw await versionConflict(rca.id, team, me.id);
   const problems = submitProblems(s);
   if (Object.keys(problems).length) throw businessRule('Section is not complete', undefined, problems);
 
@@ -147,7 +157,7 @@ sectionsRouter.post('/sections/:team/submit', async (req, res) => {
       where: { id: s.id, version: s.version },
       data: { section_status: 'SUBMITTED', submitted_at: new Date(), version: { increment: 1 }, updated_by: me.id },
     });
-    if (updated.count === 0) throw versionConflict();
+    if (updated.count === 0) throw await versionConflict(rca.id, team, me.id);
     await writeAudit(tx, rcaAudit(rca, {
       entity: 'rca_team_section',
       entity_id: s.id,
