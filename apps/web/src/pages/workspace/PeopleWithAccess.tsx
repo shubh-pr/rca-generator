@@ -101,7 +101,7 @@ export function PeopleWithAccess({ workspaceId }: { workspaceId: string }) {
                 {r.warn && (
                   <div className="mt-1">
                     <Link to={r.warn.to} className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-900 underline" data-testid="nothing-to-edit-badge">
-                      {r.warn.text}: unlock
+                      {r.warn.text} · Unlock
                     </Link>
                   </div>
                 )}

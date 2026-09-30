@@ -300,3 +300,15 @@ Details and reasons: `docs/BILLING_PLAN.md`, section 9.
 - **A real conflict says who.** A 409 `VERSION_CONFLICT` comes from another tab or another person. It includes `changed_by_self` and `changed_by_name`, and the message reads "This section was saved from another tab or window since you opened it here" or "<name> changed this section since you opened it". Reload takes the server version and drops local edits; that is its purpose.
 - **Refetched values merge; they don't overwrite.** When a form receives new server values, fields the user has not touched take the server value and fields edited locally keep the edit (`useDirtyForm`). This applies to every RCA form. Before this, text typed while a save was in flight was silently replaced by the server's copy.
 
+## Invitations: access audit, re-invites, locked sections, people with access
+
+- **Access changes are on the RCA's and workspace's own audit log.** Invite sent, invite accepted (role and team), invite revoked, collaborator or member role changed, and collaborator or member removed are written as DATA rows with `rca_id` and/or `workspace_id` (`services/accessAudit.ts`), in addition to the personal security events. They name people and failed attempts, so **only owners** see them, in the RCA change history and on the workspace Audit log. Editors and collaborators don't.
+- **Failed acceptance is logged** with a reason:
+  - `wrong_account`, `email_not_verified`, `already_used`, `revoked` or `expired` for an accept attempt;
+  - `already_used`, `revoked` or `expired` with `via: link_opened` when someone opens the link of a known invitation that can no longer be used (the page then shows no Accept button).
+
+  An unknown token is logged only for the signed-in person trying it. Anonymous guesses aren't logged, to avoid noise.
+- **Re-inviting someone who already has access stays refused (409).** Change their role in the list instead, which takes effect immediately and can't be ignored by the other person. As a defensive measure, if access exists anyway by the time an invitation is accepted, the invitation's role and team are applied and recorded as `previous`; they're never silently kept. The workspace's primary owner is never changed by an invitation.
+- **Locked sections are explained to both sides.** A contributor whose editable section is submitted, or whose RCA is no longer a draft, sees a banner naming the section and what to do. The section tab says who submitted it. The owner sees "Dev section locked: nothing to edit" on that collaborator's row in the Share panel (with **Unlock Dev**) and in People with access. The data is read from the server on every open.
+- **People with access** (workspace page, owners) lists workspace members, the collaborators of every RCA in the workspace, and pending invitations to the workspace or any RCA, in one searchable table. RCA collaborators aren't workspace members, so before this they were visible only one RCA at a time.
+

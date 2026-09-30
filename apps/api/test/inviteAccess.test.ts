@@ -156,6 +156,13 @@ describe('audit trail of access changes on the RCA and workspace log', () => {
     const failures = (await rcaAudit(r.id)).filter((e) => e.action === 'INVITE_ACCEPT_FAILED').map((e) => [e.new_value.reason, e.new_value.attempted_by_email]);
     expect(failures).toEqual(expect.arrayContaining([['wrong_account', 'mallory@x.test'], ['already_used', 'ivy@x.test'], ['revoked', 'rev@x.test'], ['expired', 'exp@x.test']]));
 
+    // Opening the link of a used invitation is recorded too (the page shows no Accept button then).
+    expect((await api().get(`/api/v1/invitations/lookup?token=${token}`)).status).toBe(404);
+    expect((await rcaAudit(r.id)).find((e) => e.action === 'INVITE_ACCEPT_FAILED' && e.new_value.via === 'link_opened')?.new_value).toMatchObject({ reason: 'already_used', invited_email: 'ivy@x.test' });
+    const before = await raw(() => db.auditLog.count());
+    expect((await api().get('/api/v1/invitations/lookup?token=unknown-token-guess-000000')).status).toBe(404);
+    expect(await raw(() => db.auditLog.count())).toBe(before); // guesses are not logged
+
     // An unknown token belongs to no RCA: only the person trying gets a security event.
     expect((await accept(intruder, 'not-a-real-token-at-all-000000000000')).status).toBe(400);
     const personal = await raw(() => db.auditLog.findMany({ where: { user_id: intruder.id, action: 'INVITE_ACCEPT_FAILED', category: 'SECURITY' } }));

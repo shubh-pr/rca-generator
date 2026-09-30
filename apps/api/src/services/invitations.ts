@@ -118,6 +118,25 @@ async function acceptFailed(reason: AcceptFailure, user: { id: string; email: st
   if (inv) await accessAudit({ action: 'INVITE_ACCEPT_FAILED', entity: 'invitations', entity_id: inv.id, target: { rca_id: inv.rca_id, workspace_id: inv.workspace_id }, user_id: user.id, detail });
 }
 
+/**
+ * Someone opened the link of a known invitation that can no longer be used (already used, revoked,
+ * expired). Recorded on its RCA/workspace audit log so the owner can see the link was tried; the
+ * lookup is public, so there is no user, and unknown tokens are not logged (no noise from guessing).
+ */
+export async function logDeadInvitationLink(token: string) {
+  const inv = await unscoped('diagnose invitation link', () => prisma.invitation.findUnique({ where: { token_hash: sha256(token) } }));
+  if (!inv) return;
+  const reason: AcceptFailure = inv.accepted_at ? 'already_used' : inv.revoked_at ? 'revoked' : 'expired';
+  await accessAudit({
+    action: 'INVITE_ACCEPT_FAILED',
+    entity: 'invitations',
+    entity_id: inv.id,
+    target: { rca_id: inv.rca_id, workspace_id: inv.workspace_id },
+    user_id: null,
+    detail: { reason, via: 'link_opened', invitation_id: inv.id, invited_email: inv.email, expires_at: inv.expires_at },
+  });
+}
+
 /** Accept by token: the invitation must be for the user's verified email address. */
 export async function acceptInvitation(token: string, user: { id: string; email: string; email_verified_at: Date | null }) {
   const inv = await lookupInvitation(token);
