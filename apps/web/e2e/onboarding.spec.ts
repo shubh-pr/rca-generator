@@ -47,6 +47,12 @@ test('public pages: landing, terms, privacy and contact are reachable without an
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
     await expect(page.locator('[data-replace-before-launch]').first()).toBeVisible();
   }
+  // The documents link to each other and to pricing; the privacy policy lists its processors in a table.
+  await page.goto('/privacy');
+  await expect(page.getByRole('table').getByRole('cell', { name: 'Payment processor (Stripe)' })).toBeVisible();
+  await page.getByTestId('legal-privacy').getByRole('link', { name: 'Terms of Service' }).first().click();
+  await expect(page).toHaveURL(/\/terms$/);
+  await expect(page.getByTestId('legal-terms').getByRole('link', { name: 'Pricing page' }).first()).toHaveAttribute('href', '/pricing');
 });
 
 test('export my data and delete my account; the account cannot log in afterwards', async ({ browser }) => {
