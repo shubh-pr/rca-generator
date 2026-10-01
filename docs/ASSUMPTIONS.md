@@ -318,3 +318,9 @@ Details and reasons: `docs/BILLING_PLAN.md`, section 9.
 - **Who shared it.** List rows for such RCAs carry `shared: { by, workspace_name, role, team }`. "Shared by" is whoever sent the invitation the user accepted; if that's unknown, it's the workspace's owner. The row tag reads "Shared by alice · alice's workspace · you are contributor (Dev section)".
 - **Consistent everywhere.** The same `shared=true` filter applies to the RCA list, the list export and the dashboard, so their numbers match.
 
+
+## Terms of Service and Privacy Policy
+
+- **Text kept as Markdown.** The Terms and Privacy Policy text is stored as written in `apps/web/src/pages/public/legal/terms.md` and `privacy.md`, so it can be edited without touching code. It's rendered by `LegalMarkdown.tsx`, which supports only what those documents use. The only edit to the supplied text is a typo fix in Terms 16.3 ("if it qualifies").
+- **Brackets.** A `[BRACKETED]` placeholder, nested ones included, is shown as a REPLACE BEFORE LAUNCH marker, which is what the launch checklist in docs/DEPLOY.md searches for. `[Pricing page]`, `[Privacy Policy]` and `[Terms of Service]` become links to those pages. `[text](url)` is an external link.
+- **The text is the operator's.** Where the legal text and the app's behaviour differ (brand name, immediate cancellation in the mock provider, no grace period after a failed payment, IP addresses not logged, page views not tracked, no receipt emails, backup encryption), the text was left as supplied. These gaps were reported for the operator to resolve before launch.

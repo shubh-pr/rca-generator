@@ -165,7 +165,7 @@ The operator console shows account and workspace metadata only. Reading a worksp
 
 Work through this checklist:
 
-- [ ] Replace every `[REPLACE BEFORE LAUNCH: …]` in `apps/web/src/pages/public/LegalPages.tsx` (Terms, Privacy, Contact) and rebuild. Have a lawyer review the Terms and Privacy Policy for your jurisdiction (GDPR and the India DPDP Act 2023).
+- [ ] Replace every `[REPLACE BEFORE LAUNCH: …]` in `apps/web/src/pages/public/legal/terms.md` and `legal/privacy.md` (the Terms and Privacy text, kept as Markdown) and `apps/web/src/pages/public/LegalPages.tsx` (Contact) and rebuild. Have a lawyer review the Terms and Privacy Policy for your jurisdiction (GDPR and the India DPDP Act 2023).
 - [ ] Replace the screenshot placeholders on the landing page (`apps/web/src/pages/public/LandingPage.tsx`).
 - [ ] Set real secrets: `JWT_SECRET`, `POSTGRES_PASSWORD`, and the email, storage and backup keys. `.env.prod` must be `chmod 600` and never committed.
 - [ ] Email domain verified, with SPF, DKIM and DMARC in place. Send yourself a verification and a password-reset email.
